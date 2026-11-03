@@ -148,8 +148,9 @@ class ShellyNeoValvePlatform {
       state.open = r.open;
       const active = r.open ? Characteristic.Active.ACTIVE : Characteristic.Active.INACTIVE;
       valve.updateCharacteristic(Characteristic.Active, active);
+      // InUse follows the valve, not the flow reading: Active on with InUse off shows "Starting..." in Home.
       valve.updateCharacteristic(Characteristic.InUse,
-        r.open && r.flowLpm > 0 ? Characteristic.InUse.IN_USE : Characteristic.InUse.NOT_IN_USE);
+        r.open ? Characteristic.InUse.IN_USE : Characteristic.InUse.NOT_IN_USE);
       temp.updateCharacteristic(Characteristic.CurrentTemperature, r.temperatureC);
       pressure.updateCharacteristic(Characteristic.CurrentAmbientLightLevel, Math.round(r.pressureKpa * 10) / 10);
       flow.updateCharacteristic(Characteristic.CurrentAmbientLightLevel, Math.round(r.flowLpm * 100) / 100);
@@ -181,6 +182,8 @@ class ShellyNeoValvePlatform {
         }
         this.log.info('%s: valve %s', name, want ? 'opened' : 'closed');
         state.open = want;
+        valve.updateCharacteristic(Characteristic.InUse,
+          want ? Characteristic.InUse.IN_USE : Characteristic.InUse.NOT_IN_USE);
         setTimeout(poll, 1500);
       });
 
