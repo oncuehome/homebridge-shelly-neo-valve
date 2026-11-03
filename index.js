@@ -8,6 +8,7 @@ const PLATFORM_NAME = 'ShellyNeoValve';
 // Shelly Gen3 XT1 "neo-water-valve-advanced" exposes its readings as virtual components,
 // identified by attrs.role. Flow is reported in m3/min; we show L/min.
 const M3_PER_MIN_TO_L_PER_MIN = 1000;
+const KPA_PER_BAR = 100;
 const REQUEST_TIMEOUT_MS = 8000;
 
 function parseComponents(json) {
@@ -25,7 +26,7 @@ function parseComponents(json) {
     id: out.state.id,
     open: out.state.value === true,
     temperatureC: out.water_temperature.value,
-    pressureKpa: out.water_pressure.value,
+    pressureBar: out.water_pressure.value / KPA_PER_BAR,
     flowLpm: (out.flow_rate ? out.flow_rate.value : 0) * M3_PER_MIN_TO_L_PER_MIN,
   };
 }
@@ -117,7 +118,7 @@ class ShellyNeoValvePlatform {
       s.getCharacteristic(Characteristic.CurrentAmbientLightLevel).setProps({ minValue: 0, maxValue: 100000 });
       return s;
     };
-    const pressure = lux('pressure', `${name} pressure in kPa`);
+    const pressure = lux('pressure', `${name} pressure in bar`);
     const flow = lux('flow', `${name} flow in L per min`);
 
     const all = [valve, temp, pressure, flow];
@@ -152,7 +153,7 @@ class ShellyNeoValvePlatform {
       valve.updateCharacteristic(Characteristic.InUse,
         r.open ? Characteristic.InUse.IN_USE : Characteristic.InUse.NOT_IN_USE);
       temp.updateCharacteristic(Characteristic.CurrentTemperature, r.temperatureC);
-      pressure.updateCharacteristic(Characteristic.CurrentAmbientLightLevel, Math.round(r.pressureKpa * 10) / 10);
+      pressure.updateCharacteristic(Characteristic.CurrentAmbientLightLevel, Math.round(r.pressureBar * 100) / 100);
       flow.updateCharacteristic(Characteristic.CurrentAmbientLightLevel, Math.round(r.flowLpm * 100) / 100);
       setFault(false);
     };

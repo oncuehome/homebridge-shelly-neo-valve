@@ -7,7 +7,7 @@ const r = parseComponents({ components: [
   { key: 'object:200', attrs: { role: 'water_consumption' }, status: { value: {} } } ] });
 assert.strictEqual(r.open, true);
 assert.strictEqual(Math.round(r.flowLpm), 12);
-assert.strictEqual(r.pressureKpa, 312.5);
+assert.strictEqual(r.pressureBar, 3.125);
 assert.strictEqual(r.temperatureC, 18.4);
 assert.throws(() => parseComponents({ components: [] }));
 console.log('ok');
