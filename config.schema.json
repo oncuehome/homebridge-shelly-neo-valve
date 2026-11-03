@@ -26,7 +26,9 @@
           "type": "object",
           "properties": {
             "name": { "title": "Name", "type": "string", "default": "Water Valve", "required": true },
-            "host": { "title": "IP address or hostname", "type": "string", "required": true, "placeholder": "192.168.1.50" }
+            "host": { "title": "IP address or hostname", "type": "string", "required": true, "placeholder": "192.168.1.50" },
+            "username": { "title": "Username", "type": "string", "default": "admin" },
+            "password": { "title": "Password", "description": "The valve's device password. Leave empty if the valve has no password set.", "type": "string", "x-schema-form": { "type": "password" } }
           }
         }
       }

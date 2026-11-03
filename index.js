@@ -1,5 +1,7 @@
 'use strict';
 
+const crypto = require('crypto');
+
 const PLUGIN_NAME = 'homebridge-shelly-neo-valve';
 const PLATFORM_NAME = 'ShellyNeoValve';
 
@@ -26,6 +28,22 @@ function parseComponents(json) {
     pressureKpa: out.water_pressure.value,
     flowLpm: (out.flow_rate ? out.flow_rate.value : 0) * M3_PER_MIN_TO_L_PER_MIN,
   };
+}
+
+const sha256 = (x) => crypto.createHash('sha256').update(x).digest('hex');
+
+// Gen2+ Shelly devices use HTTP digest auth with SHA-256 (the same scheme the other On Cue Shelly tools use).
+function digestHeader(challenge, username, password, method, uri) {
+  const p = {};
+  for (const m of String(challenge).matchAll(/(\w+)="?([^",]*)"?/g)) p[m[1]] = m[2];
+  if (!p.realm || !p.nonce) throw new Error('unexpected authentication challenge');
+  const ha1 = sha256(`${username}:${p.realm}:${password}`);
+  const ha2 = sha256(`${method}:${uri}`);
+  const cnonce = crypto.randomBytes(8).toString('hex');
+  const nc = '00000001';
+  const response = sha256(`${ha1}:${p.nonce}:${nc}:${cnonce}:auth:${ha2}`);
+  return `Digest username="${username}", realm="${p.realm}", nonce="${p.nonce}", uri="${uri}", ` +
+    `cnonce="${cnonce}", nc=${nc}, qop=auth, response="${response}", algorithm=SHA-256`;
 }
 
 class ShellyNeoValvePlatform {
@@ -60,7 +78,7 @@ class ShellyNeoValvePlatform {
         this.accessories.set(uuid, accessory);
         this.log.info('Added %s (%s)', name, dev.host);
       }
-      this.setup(accessory, name, dev.host);
+      this.setup(accessory, name, dev.host, dev.username || 'admin', dev.password);
     }
 
     for (const [uuid, accessory] of this.accessories) {
@@ -72,7 +90,7 @@ class ShellyNeoValvePlatform {
     }
   }
 
-  setup(accessory, name, host) {
+  setup(accessory, name, host, username, password) {
     const { Service, Characteristic } = this.api.hap;
     const base = `http://${host}`;
     const state = { id: 200, open: false };
@@ -108,13 +126,19 @@ class ShellyNeoValvePlatform {
         ? Characteristic.StatusFault.GENERAL_FAULT : Characteristic.StatusFault.NO_FAULT));
 
     const rpc = async (path, body) => {
-      const res = await fetch(base + path, {
-        method: body ? 'POST' : 'GET',
-        headers: body ? { 'Content-Type': 'application/json' } : undefined,
+      const method = body ? 'POST' : 'GET';
+      const send = (auth) => fetch(base + path, {
+        method,
+        headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...(auth ? { Authorization: auth } : {}) },
         body: body ? JSON.stringify(body) : undefined,
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
-      if (res.status === 401) throw new Error('valve has authentication on; not supported');
+      let res = await send();
+      if (res.status === 401) {
+        if (!password) throw new Error('the valve wants a password; set "password" in the config');
+        res = await send(digestHeader(res.headers.get('www-authenticate'), username, password, method, path));
+        if (res.status === 401) throw new Error('the valve refused the username/password');
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return res.json();
     };
@@ -167,3 +191,4 @@ class ShellyNeoValvePlatform {
 
 module.exports = (api) => api.registerPlatform(PLATFORM_NAME, ShellyNeoValvePlatform);
 module.exports.parseComponents = parseComponents;
+module.exports.digestHeader = digestHeader;
