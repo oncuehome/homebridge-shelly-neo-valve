@@ -117,8 +117,8 @@ class ShellyNeoValvePlatform {
       s.getCharacteristic(Characteristic.CurrentAmbientLightLevel).setProps({ minValue: 0, maxValue: 100000 });
       return s;
     };
-    const pressure = lux('pressure', `${name} pressure (kPa)`);
-    const flow = lux('flow', `${name} flow (L/min)`);
+    const pressure = lux('pressure', `${name} pressure in kPa`);
+    const flow = lux('flow', `${name} flow in L per min`);
 
     const all = [valve, temp, pressure, flow];
     const setFault = (fault) => all.forEach((s) =>

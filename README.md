@@ -8,8 +8,8 @@ Homebridge plugin for the **Shelly Neo Smart Water Valve** (Gen3, "Powered by Sh
 |---|---|---|
 | Valve (open/close) | Valve | Reads and sets the valve's `state` component |
 | Water temperature | Temperature Sensor | Real °C |
-| Water pressure (kPa) | Light Sensor | HomeKit has no pressure sensor. The number is the real kPa value, but Apple Home labels it "lux". |
-| Water flow (L/min) | Light Sensor | HomeKit has no flow sensor. The number is the real L/min value, labelled "lux". |
+| Water pressure in kPa | Light Sensor | HomeKit has no pressure sensor. The number is the real kPa value, but Apple Home labels it "lux". |
+| Water flow in L per min | Light Sensor | HomeKit has no flow sensor. The number is the real L/min value, labelled "lux". |
 
 All four sit in one accessory per valve. Tiles show a "No Response" fault if the valve is unreachable.
 
