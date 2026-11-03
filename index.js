@@ -170,6 +170,8 @@ class ShellyNeoValvePlatform {
       }
     };
 
+    valve.getCharacteristic(Characteristic.InUse)
+      .onGet(() => (state.open ? Characteristic.InUse.IN_USE : Characteristic.InUse.NOT_IN_USE));
     valve.getCharacteristic(Characteristic.Active)
       .onGet(() => (state.open ? Characteristic.Active.ACTIVE : Characteristic.Active.INACTIVE))
       .onSet(async (v) => {
@@ -182,8 +184,11 @@ class ShellyNeoValvePlatform {
         }
         this.log.info('%s: valve %s', name, want ? 'opened' : 'closed');
         state.open = want;
-        valve.updateCharacteristic(Characteristic.InUse,
-          want ? Characteristic.InUse.IN_USE : Characteristic.InUse.NOT_IN_USE);
+        // Home ignores an InUse change that arrives before it has the write response, and then sits on
+        // "Starting"/"Stopping". Send it just after, and again once the next poll has confirmed the state.
+        const inUse = () => valve.updateCharacteristic(Characteristic.InUse,
+          state.open ? Characteristic.InUse.IN_USE : Characteristic.InUse.NOT_IN_USE);
+        setTimeout(inUse, 700);
         setTimeout(poll, 1500);
       });
 
