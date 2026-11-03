@@ -1,0 +1,35 @@
+{
+  "pluginAlias": "ShellyNeoValve",
+  "pluginType": "platform",
+  "singular": true,
+  "headerDisplay": "Shelly Neo Smart Water Valve (Gen3). Shows the valve, water temperature, pressure (kPa) and flow (L/min). HomeKit has no pressure or flow sensor, so those two appear as Light Sensors: the number shown is the real value, but Apple Home labels it lux.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "title": "Name",
+        "type": "string",
+        "default": "Shelly Neo Valve",
+        "required": true
+      },
+      "pollSeconds": {
+        "title": "Poll interval (seconds)",
+        "type": "integer",
+        "default": 15,
+        "minimum": 5,
+        "maximum": 300
+      },
+      "devices": {
+        "title": "Valves",
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": { "title": "Name", "type": "string", "default": "Water Valve", "required": true },
+            "host": { "title": "IP address or hostname", "type": "string", "required": true, "placeholder": "192.168.1.50" }
+          }
+        }
+      }
+    }
+  }
+}
