@@ -113,7 +113,7 @@ class ShellyNeoValvePlatform {
 
     const valve = sub(Service.Valve, 'valve', name);
     valve.setCharacteristic(Characteristic.Name, name);
-    valve.setCharacteristic(Characteristic.ValveType, Characteristic.ValveType.GENERIC_VALVE);
+    valve.setCharacteristic(Characteristic.ValveType, Characteristic.ValveType.WATER_FAUCET);
 
     // By default the readings also appear in Home (HomeKit has no pressure or flow sensor, so those two are
     // light sensors). Set "homeSensors": false to keep only the valve in Home and read the rest elsewhere.
