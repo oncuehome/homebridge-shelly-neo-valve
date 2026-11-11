@@ -1,8 +1,8 @@
 {
   "displayName": "Homebridge Shelly Neo Water Valve",
   "name": "homebridge-shelly-neo-valve",
-  "version": "0.3.0",
-  "description": "HomeKit valve, temperature, pressure and flow readings for the Shelly Neo Smart Water Valve (Gen3, XT1), over its local RPC interface.",
+  "version": "0.4.0",
+  "description": "HomeKit valve for the Shelly Neo Smart Water Valve (Gen3, XT1) over its local RPC interface, with optional temperature, pressure and flow tiles and a snapshot file of the readings every few minutes.",
   "license": "Apache-2.0",
   "author": "On Cue Home",
   "repository": {
@@ -10,7 +10,13 @@
     "url": "git+https://github.com/oncuehome/homebridge-shelly-neo-valve.git"
   },
   "main": "index.js",
-  "files": ["index.js", "config.schema.json", "README.md", "LICENSE"],
+  "files": [
+    "index.js",
+    "recorder.js",
+    "config.schema.json",
+    "README.md",
+    "LICENSE"
+  ],
   "engines": {
     "homebridge": "^1.6.0 || ^2.0.0",
     "node": "^18.15.0 || ^20.7.0 || ^22 || ^24"
@@ -18,6 +24,12 @@
   "scripts": {
     "test": "node test.js"
   },
-  "keywords": ["homebridge-plugin", "shelly", "neo", "water-valve", "homebridge"],
+  "keywords": [
+    "homebridge-plugin",
+    "shelly",
+    "neo",
+    "water-valve",
+    "homebridge"
+  ],
   "dependencies": {}
 }

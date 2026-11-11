@@ -1,6 +1,8 @@
 'use strict';
 
 const crypto = require('crypto');
+const path = require('path');
+const { Recorder, gaugeBar, DEFAULT_ATMOSPHERIC_BAR } = require('./recorder.js');
 
 const PLUGIN_NAME = 'homebridge-shelly-neo-valve';
 const PLATFORM_NAME = 'ShellyNeoValve';
@@ -21,13 +23,18 @@ function parseComponents(json) {
   if (!out.state || !('water_pressure' in out) || !out.water_temperature) {
     throw new Error('not a Neo water valve (missing state/pressure/temperature components)');
   }
+  const total = out.water_consumption && out.water_consumption.value && out.water_consumption.value.counter
+    ? out.water_consumption.value.counter.total : undefined;
   return {
     key: out.state.key,
     id: out.state.id,
     open: out.state.value === true,
     temperatureC: out.water_temperature.value,
+    // As the valve reports it: absolute while no water flows (see gaugeBar in recorder.js).
     pressureBar: out.water_pressure.value / KPA_PER_BAR,
     flowLpm: (out.flow_rate ? out.flow_rate.value : 0) * M3_PER_MIN_TO_L_PER_MIN,
+    // Total water used since the counter was last reset, in litres (the valve reports m3).
+    consumptionL: typeof total === 'number' ? total * 1000 : null,
   };
 }
 
@@ -94,7 +101,7 @@ class ShellyNeoValvePlatform {
   setup(accessory, name, host, username, password) {
     const { Service, Characteristic } = this.api.hap;
     const base = `http://${host}`;
-    const state = { id: 200, open: false };
+    const state = { id: 200, open: undefined };
 
     accessory.getService(Service.AccessoryInformation)
       .setCharacteristic(Characteristic.Manufacturer, 'Neo Electronics / Shelly')
@@ -108,20 +115,68 @@ class ShellyNeoValvePlatform {
     valve.setCharacteristic(Characteristic.Name, name);
     valve.setCharacteristic(Characteristic.ValveType, Characteristic.ValveType.GENERIC_VALVE);
 
-    const temp = sub(Service.TemperatureSensor, 'temp', `${name} temperature`);
-    temp.setCharacteristic(Characteristic.Name, `${name} temperature`);
-    temp.getCharacteristic(Characteristic.CurrentTemperature).setProps({ minValue: -25, maxValue: 80 });
+    // By default the readings also appear in Home (HomeKit has no pressure or flow sensor, so those two are
+    // light sensors). Set "homeSensors": false to keep only the valve in Home and read the rest elsewhere.
+    const homeSensors = this.config.homeSensors !== false;
+    let temp, pressure, flow;
+    if (homeSensors) {
+      temp = sub(Service.TemperatureSensor, 'temp', `${name} temperature`);
+      temp.setCharacteristic(Characteristic.Name, `${name} temperature`);
+      temp.getCharacteristic(Characteristic.CurrentTemperature).setProps({ minValue: -25, maxValue: 80 });
 
-    const lux = (subtype, label) => {
-      const s = sub(Service.LightSensor, subtype, label);
-      s.setCharacteristic(Characteristic.Name, label);
-      s.getCharacteristic(Characteristic.CurrentAmbientLightLevel).setProps({ minValue: 0, maxValue: 100000 });
-      return s;
-    };
-    const pressure = lux('pressure', `${name} pressure in bar`);
-    const flow = lux('flow', `${name} flow in L per min`);
+      const lux = (subtype, label) => {
+        const s = sub(Service.LightSensor, subtype, label);
+        s.setCharacteristic(Characteristic.Name, label);
+        s.getCharacteristic(Characteristic.CurrentAmbientLightLevel).setProps({ minValue: 0, maxValue: 100000 });
+        return s;
+      };
+      pressure = lux('pressure', `${name} pressure in bar`);
+      flow = lux('flow', `${name} flow in L per min`);
+    } else {
+      for (const [type, subtype] of [[Service.TemperatureSensor, 'temp'], [Service.LightSensor, 'pressure'], [Service.LightSensor, 'flow']]) {
+        const old = accessory.getServiceById(type, subtype);
+        if (old) accessory.removeService(old);
+      }
+    }
 
-    const all = [valve, temp, pressure, flow];
+    // Home cannot notify on a Valve changing state, but it can on sensors. So the valve also shows as a contact
+    // sensor (Closed = water off) and a leak sensor that trips when the valve shuts WITHOUT being told to
+    // (a valve alarm, the Shelly app, the button on the valve). "valveSensors": false removes both.
+    const valveSensors = this.config.valveSensors !== false;
+    let contact, alarm;
+    if (valveSensors) {
+      contact = sub(Service.ContactSensor, 'shut', `${name} closed`);
+      contact.setCharacteristic(Characteristic.Name, `${name} closed`);
+      alarm = sub(Service.LeakSensor, 'alarm', `${name} alarm`);
+      alarm.setCharacteristic(Characteristic.Name, `${name} alarm`);
+    } else {
+      for (const [type, subtype] of [[Service.ContactSensor, 'shut'], [Service.LeakSensor, 'alarm']]) {
+        const old = accessory.getServiceById(type, subtype);
+        if (old) accessory.removeService(old);
+      }
+    }
+    let lastCommandAt = 0;
+    let alarmOn = false;
+
+    const all = [valve, temp, pressure, flow, contact, alarm].filter(Boolean);
+
+    // Snapshots: one reading every few minutes into a small JSON file (see recorder.js).
+    const atmosphericBar = typeof this.config.atmosphericBar === 'number' ? this.config.atmosphericBar : DEFAULT_ATMOSPHERIC_BAR;
+    let recorder = null;
+    let snapshotEveryMs = 0;
+    if (this.config.snapshots !== false) {
+      const dir = this.config.snapshotDir || path.join(this.api.user.storagePath(), 'neo-valve');
+      const slug = String(host).toLowerCase().replace(/[^a-z0-9.-]+/g, '-');
+      const days = Math.min(90, Math.max(1, this.config.historyDays || 14));
+      const everyMin = Math.min(60, Math.max(1, this.config.snapshotMinutes || 10));
+      recorder = new Recorder({
+        file: path.join(dir, `${slug}.json`),
+        device: { name, host },
+        atmosphericBar,
+        maxRows: Math.ceil((days * 24 * 60) / everyMin),
+      });
+      snapshotEveryMs = everyMin * 60 * 1000;
+    }
     const setFault = (fault) => all.forEach((s) =>
       s.updateCharacteristic(Characteristic.StatusFault, fault
         ? Characteristic.StatusFault.GENERAL_FAULT : Characteristic.StatusFault.NO_FAULT));
@@ -146,25 +201,51 @@ class ShellyNeoValvePlatform {
 
     const apply = (r) => {
       state.id = r.id;
+      const wasOpen = state.open;
       state.open = r.open;
+      if (valveSensors) {
+        contact.updateCharacteristic(Characteristic.ContactSensorState, r.open
+          ? Characteristic.ContactSensorState.CONTACT_NOT_DETECTED : Characteristic.ContactSensorState.CONTACT_DETECTED);
+        // wasOpen is undefined until the first reading, so a valve found already shut at start is not an alarm.
+        if (wasOpen === true && !r.open && Date.now() - lastCommandAt > 60000) {
+          alarmOn = true;
+          this.log.warn('%s: shut by itself or from outside Home', name);
+        }
+        if (r.open) alarmOn = false;
+        alarm.updateCharacteristic(Characteristic.LeakDetected, alarmOn
+          ? Characteristic.LeakDetected.LEAK_DETECTED : Characteristic.LeakDetected.LEAK_NOT_DETECTED);
+      }
       const active = r.open ? Characteristic.Active.ACTIVE : Characteristic.Active.INACTIVE;
       valve.updateCharacteristic(Characteristic.Active, active);
       // InUse follows the valve, not the flow reading: Active on with InUse off shows "Starting..." in Home.
       valve.updateCharacteristic(Characteristic.InUse,
         r.open ? Characteristic.InUse.IN_USE : Characteristic.InUse.NOT_IN_USE);
-      temp.updateCharacteristic(Characteristic.CurrentTemperature, r.temperatureC);
-      pressure.updateCharacteristic(Characteristic.CurrentAmbientLightLevel, Math.round(r.pressureBar * 100) / 100);
-      flow.updateCharacteristic(Characteristic.CurrentAmbientLightLevel, Math.round(r.flowLpm * 100) / 100);
+      if (homeSensors) {
+        temp.updateCharacteristic(Characteristic.CurrentTemperature, r.temperatureC);
+        pressure.updateCharacteristic(Characteristic.CurrentAmbientLightLevel,
+          Math.round(gaugeBar(r.pressureBar, r.flowLpm, atmosphericBar) * 100) / 100);
+        flow.updateCharacteristic(Characteristic.CurrentAmbientLightLevel, Math.round(r.flowLpm * 100) / 100);
+      }
       setFault(false);
     };
 
     let lastErr = null;
+    let reachable = false;
+    let firstSnapshotDone = false;
     const poll = async () => {
       try {
-        apply(parseComponents(await rpc('/rpc/Shelly.GetComponents?dynamic_only=true')));
+        const reading = parseComponents(await rpc('/rpc/Shelly.GetComponents?dynamic_only=true'));
+        apply(reading);
+        reachable = true;
+        if (recorder) {
+          recorder.observe(reading);
+          // Record the first good reading at once, so there is a snapshot as soon as the plugin starts.
+          if (!firstSnapshotDone) { firstSnapshotDone = true; recorder.snapshot(true); }
+        }
         if (lastErr) this.log.info('%s is reachable again', name);
         lastErr = null;
       } catch (e) {
+        reachable = false;
         if (String(e) !== lastErr) this.log.warn('%s (%s): %s', name, host, e.message || e);
         lastErr = String(e);
         setFault(true);
@@ -172,11 +253,12 @@ class ShellyNeoValvePlatform {
     };
 
     valve.getCharacteristic(Characteristic.InUse)
-      .onGet(() => (state.open ? Characteristic.InUse.IN_USE : Characteristic.InUse.NOT_IN_USE));
+      .onGet(() => (state.open === true ? Characteristic.InUse.IN_USE : Characteristic.InUse.NOT_IN_USE));
     valve.getCharacteristic(Characteristic.Active)
-      .onGet(() => (state.open ? Characteristic.Active.ACTIVE : Characteristic.Active.INACTIVE))
+      .onGet(() => (state.open === true ? Characteristic.Active.ACTIVE : Characteristic.Active.INACTIVE))
       .onSet(async (v) => {
         const want = v === Characteristic.Active.ACTIVE;
+        lastCommandAt = Date.now();
         try {
           await rpc('/rpc/Boolean.Set', { id: state.id, value: want });
         } catch (e) {
@@ -195,9 +277,15 @@ class ShellyNeoValvePlatform {
 
     poll();
     this.timers.push(setInterval(poll, Math.max(5, this.config.pollSeconds || 15) * 1000));
+    if (recorder) {
+      this.timers.push(setInterval(() => {
+        try { recorder.snapshot(reachable); } catch (e) { this.log.warn('%s: could not save the snapshot: %s', name, e.message || e); }
+      }, snapshotEveryMs));
+    }
   }
 }
 
 module.exports = (api) => api.registerPlatform(PLATFORM_NAME, ShellyNeoValvePlatform);
 module.exports.parseComponents = parseComponents;
 module.exports.digestHeader = digestHeader;
+module.exports.gaugeBar = gaugeBar;

@@ -34,3 +34,62 @@ srv.listen(0, async () => {
   assert.strictEqual(bad.status, 401);
   console.log('digest ok'); srv.close();
 });
+
+// Snapshot recorder and the gauge pressure rule.
+const { gaugeBar } = require('./index.js');
+const { Recorder } = require('./recorder.js');
+const fs = require('fs'), os = require('os'), path = require('path');
+// no flow: the valve shows absolute pressure, so the atmosphere is subtracted
+assert.strictEqual(gaugeBar(4.55, 0), 3.537);
+assert.strictEqual(gaugeBar(4.55, 0, 0.95), 3.6);
+// water flowing: the reading is used as it is
+assert.strictEqual(gaugeBar(3.4, 12), 3.4);
+// never negative, and nonsense gives null
+assert.strictEqual(gaugeBar(0.5, 0), 0);
+assert.strictEqual(gaugeBar(undefined, 0), null);
+// consumption comes through in litres
+const withTotal = parseComponents({ components: [
+  c('boolean:200', 'state', true, 200), c('number:200', 'flow_rate', 0, 200), c('number:201', 'water_pressure', 455, 201), c('number:202', 'water_temperature', 13.4, 202),
+  { key: 'object:200', attrs: { role: 'water_consumption' }, status: { value: { counter: { total: 0.016277263 } } } } ] });
+assert.strictEqual(Math.round(withTotal.consumptionL * 1000) / 1000, 16.277);
+assert.strictEqual(r.consumptionL, null);
+
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'neo-'));
+const file = path.join(dir, 'sub', 'v.json');
+let clock = new Date('2026-11-11T12:00:00Z');
+const rec = new Recorder({ file, device: { name: 'V', host: 'h' }, maxRows: 3, now: () => clock });
+const reading = (over) => ({ open: true, flowLpm: 0, pressureBar: 4.55, temperatureC: 13.4, consumptionL: 16.277, ...over });
+rec.observe(reading());
+let row = rec.snapshot(true);
+assert.strictEqual(row.ok, true);
+assert.strictEqual(row.pressure_bar, 3.537);          // gauge at no flow
+assert.strictEqual(row.pressure_bar_raw, 4.55);        // raw kept
+assert.strictEqual(row.used_l, null);                  // no earlier total to compare with
+// ten minutes later: a fill happened (peak flow 11.5 L/min, 30 L used), flow back to 0 at the snapshot
+clock = new Date('2026-11-11T12:10:00Z');
+rec.observe(reading({ flowLpm: 11.5, pressureBar: 3.4, consumptionL: 40 }));
+rec.observe(reading({ flowLpm: 0, consumptionL: 46.277 }));
+row = rec.snapshot(true);
+assert.strictEqual(row.flow_peak_lpm, 11.5);
+assert.strictEqual(row.used_l, 30);
+// the valve unreachable: a gap row, no invented numbers
+clock = new Date('2026-11-11T12:20:00Z');
+row = rec.snapshot(false);
+assert.deepStrictEqual(Object.keys(row).sort(), ['ok', 't']);
+// a counter that went down was reset: count from zero
+clock = new Date('2026-11-11T12:30:00Z');
+rec.observe(reading({ consumptionL: 2 }));
+row = rec.snapshot(true);
+assert.strictEqual(row.used_l, 2);
+// only maxRows kept, written atomically, and reloaded by a restart
+const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
+assert.strictEqual(saved.history.length, 3);
+assert.strictEqual(saved.schema, 1);
+assert.strictEqual(saved.latest.valve_open, true);
+assert.ok(!fs.existsSync(`${file}.tmp`));
+assert.ok(!/password/i.test(JSON.stringify(saved)));
+const again = new Recorder({ file, device: { name: 'V', host: 'h' }, maxRows: 3, now: () => clock });
+assert.strictEqual(again.history.length, 3);
+assert.strictEqual(again.lastTotalL, 2);
+fs.rmSync(dir, { recursive: true });
+console.log('recorder ok');

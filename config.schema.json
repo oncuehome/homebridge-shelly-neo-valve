@@ -2,7 +2,7 @@
   "pluginAlias": "ShellyNeoValve",
   "pluginType": "platform",
   "singular": true,
-  "headerDisplay": "Shelly Neo Smart Water Valve (Gen3). Shows the valve, water temperature, pressure (bar) and flow (L/min). HomeKit has no pressure or flow sensor, so those two appear as Light Sensors: the number shown is the real value, but Apple Home labels it lux.",
+  "headerDisplay": "Shelly Neo Smart Water Valve (Gen3). Shows the valve in Apple Home. Optionally also shows water temperature, pressure (bar) and flow (L/min) (HomeKit has no pressure or flow sensor, so those two appear as Light Sensors: the number is the real value, labelled lux). It can also save a snapshot of the readings every few minutes to a file, for other tools to read.",
   "schema": {
     "type": "object",
     "properties": {
@@ -19,16 +19,80 @@
         "minimum": 5,
         "maximum": 300
       },
+      "homeSensors": {
+        "title": "Show temperature, pressure and flow in Apple Home",
+        "type": "boolean",
+        "default": true
+      },
+      "valveSensors": {
+        "title": "Add a Closed sensor and an Alarm sensor to Apple Home",
+        "description": "Home cannot notify when a valve changes. Closed is a contact sensor (Closed = water off). Alarm trips when the valve shuts without Home telling it to (a valve alarm, the Shelly app or the button), and clears when it opens. Turn on notifications for them in the Home app.",
+        "type": "boolean",
+        "default": true
+      },
+      "atmosphericBar": {
+        "title": "Atmospheric pressure (bar)",
+        "description": "The valve shows absolute pressure while no water flows. This is subtracted to give the real water pressure. 1.013 at sea level; lower at altitude.",
+        "type": "number",
+        "default": 1.013,
+        "minimum": 0.5,
+        "maximum": 1.1
+      },
+      "snapshots": {
+        "title": "Save snapshots of the readings",
+        "type": "boolean",
+        "default": true
+      },
+      "snapshotMinutes": {
+        "title": "Snapshot interval (minutes)",
+        "type": "integer",
+        "default": 10,
+        "minimum": 1,
+        "maximum": 60
+      },
+      "historyDays": {
+        "title": "Days of history to keep in the snapshot file",
+        "type": "integer",
+        "default": 14,
+        "minimum": 1,
+        "maximum": 90
+      },
+      "snapshotDir": {
+        "title": "Folder for the snapshot file",
+        "description": "Leave empty to use a neo-valve folder inside Homebridge's storage folder.",
+        "type": "string"
+      },
       "devices": {
         "title": "Valves",
         "type": "array",
         "items": {
           "type": "object",
           "properties": {
-            "name": { "title": "Name", "type": "string", "default": "Water Valve", "required": true },
-            "host": { "title": "IP address or hostname", "type": "string", "required": true, "placeholder": "192.168.1.50" },
-            "username": { "title": "Username", "type": "string", "default": "admin" },
-            "password": { "title": "Password", "description": "The valve's device password. Leave empty if the valve has no password set.", "type": "string", "x-schema-form": { "type": "password" } }
+            "name": {
+              "title": "Name",
+              "type": "string",
+              "default": "Water Valve",
+              "required": true
+            },
+            "host": {
+              "title": "IP address or hostname",
+              "type": "string",
+              "required": true,
+              "placeholder": "192.168.1.50"
+            },
+            "username": {
+              "title": "Username",
+              "type": "string",
+              "default": "admin"
+            },
+            "password": {
+              "title": "Password",
+              "description": "The valve's device password. Leave empty if the valve has no password set.",
+              "type": "string",
+              "x-schema-form": {
+                "type": "password"
+              }
+            }
           }
         }
       }
