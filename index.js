@@ -4,7 +4,7 @@ const crypto = require('crypto');
 const path = require('path');
 const { Recorder, gaugeBar, DEFAULT_ATMOSPHERIC_BAR } = require('./recorder.js');
 const { RunTracker, Allowance, inWindow } = require('./longrun.js');
-const { summariseSettings, describeSettings, settingsKey } = require('./limits.js');
+const { summariseSettings, describeSettings, settingsKey, settingsWarnings, homeUnits, fromBar, fromLitres, pressureLabel, flowLabel } = require('./limits.js');
 
 const PLUGIN_NAME = 'homebridge-shelly-neo-valve';
 const PLATFORM_NAME = 'ShellyNeoValve';
@@ -149,6 +149,7 @@ class ShellyNeoValvePlatform {
     // By default the readings also appear in Home (HomeKit has no pressure or flow sensor, so those two are
     // light sensors). Set "homeSensors": false to keep only the valve in Home and read the rest elsewhere.
     const homeSensors = this.config.homeSensors !== false;
+    let units = homeUnits(this.config.homeUnits, null);
     let temp, pressure, flow;
     if (homeSensors) {
       temp = sub(Service.TemperatureSensor, 'temp', `${name} temperature`);
@@ -161,8 +162,9 @@ class ShellyNeoValvePlatform {
         s.getCharacteristic(Characteristic.CurrentAmbientLightLevel).setProps({ minValue: 0, maxValue: 100000 });
         return s;
       };
-      pressure = lux('pressure', `${name} pressure in bar`);
-      flow = lux('flow', `${name} flow in L per min`);
+      // The unit follows the setting (by default the valve's own page) once the valve has been read; until then bar and L/min.
+      pressure = lux('pressure', `${name} pressure in ${pressureLabel(units.pressure)}`);
+      flow = lux('flow', `${name} flow in ${flowLabel(units.volume)}`);
     } else {
       for (const [type, subtype] of [[Service.TemperatureSensor, 'temp'], [Service.LightSensor, 'pressure'], [Service.LightSensor, 'flow']]) {
         const old = accessory.getServiceById(type, subtype);
@@ -313,8 +315,8 @@ class ShellyNeoValvePlatform {
       if (homeSensors) {
         temp.updateCharacteristic(Characteristic.CurrentTemperature, r.temperatureC);
         pressure.updateCharacteristic(Characteristic.CurrentAmbientLightLevel,
-          Math.round(gaugeBar(r.pressureBar, r.flowLpm, atmosphericBar) * 100) / 100);
-        flow.updateCharacteristic(Characteristic.CurrentAmbientLightLevel, Math.round(r.flowLpm * 100) / 100);
+          Math.round(fromBar(gaugeBar(r.pressureBar, r.flowLpm, atmosphericBar), units.pressure) * 100) / 100);
+        flow.updateCharacteristic(Characteristic.CurrentAmbientLightLevel, Math.round(fromLitres(r.flowLpm, units.volume) * 100) / 100);
       }
       setFault(false);
     };
@@ -411,9 +413,18 @@ class ShellyNeoValvePlatform {
         let sys = null;
         try { sys = await rpc('/rpc/Sys.GetConfig'); } catch (e) { /* the limits are the useful part */ }
         const settings = summariseSettings(service, sys);
+        const newUnits = homeUnits(this.config.homeUnits, service);
+        if (homeSensors && (newUnits.pressure !== units.pressure || newUnits.volume !== units.volume)) {
+          units = newUnits;
+          const pl = `${name} pressure in ${pressureLabel(units.pressure)}`, fl = `${name} flow in ${flowLabel(units.volume)}`;
+          pressure.setCharacteristic(Characteristic.Name, pl).setCharacteristic(Characteristic.ConfiguredName, pl);
+          flow.setCharacteristic(Characteristic.Name, fl).setCharacteristic(Characteristic.ConfiguredName, fl);
+          this.log.info('%s: Home shows pressure in %s and flow in %s', name, pressureLabel(units.pressure), flowLabel(units.volume));
+        }
         const key = settingsKey(settings);
         if (lastSettingsKey === null) this.log.info('%s: valve settings: %s', name, describeSettings(settings));
         else if (key !== lastSettingsKey) this.log.warn('%s: the valve\'s settings changed: %s', name, describeSettings(settings));
+        if (key !== lastSettingsKey) for (const w of settingsWarnings(settings)) this.log.warn('%s: check the valve first: %s', name, w);
         lastSettingsKey = key;
         if (recorder) recorder.setSettings(settings);
       } catch (e) {

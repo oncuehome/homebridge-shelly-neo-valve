@@ -222,3 +222,31 @@ console.log('longrun ok');
   a2.strictEqual(al3.update(2 * H, 3, true).litres, 5, 'a counter reset counts from zero');
   console.log('ok allowance and window');
 }
+
+// --- Home units follow the valve ---
+{
+  const { homeUnits, fromBar, fromLitres, pressureLabel, flowLabel } = require('./limits.js');
+  const a3 = require('assert');
+  a3.deepStrictEqual(homeUnits(undefined, { pressure_unit: 'PSI', volume_unit: 'lit' }), { pressure: 'psi', volume: 'L' });
+  a3.deepStrictEqual(homeUnits('valve', { pressure_unit: 'bar', volume_unit: 'gal' }), { pressure: 'bar', volume: 'gal' });
+  a3.deepStrictEqual(homeUnits('metric', { pressure_unit: 'PSI', volume_unit: 'gal' }), { pressure: 'bar', volume: 'L' });
+  a3.deepStrictEqual(homeUnits('us', null), { pressure: 'psi', volume: 'gal' });
+  a3.deepStrictEqual(homeUnits(undefined, null), { pressure: 'bar', volume: 'L' });
+  a3.ok(Math.abs(fromBar(3.4, 'psi') - 49.31) < 0.01 && fromBar(3.4, 'kpa') === 340 && fromBar(3.4, 'bar') === 3.4);
+  a3.ok(Math.abs(fromLitres(7.57, 'gal') - 2) < 0.001 && fromLitres(5, 'L') === 5);
+  a3.deepStrictEqual([pressureLabel('psi'), flowLabel('gal')], ['PSI', 'gal per min']);
+  console.log('ok units');
+}
+
+// --- warn when the valve's limits look unset ---
+{
+  const { summariseSettings, settingsWarnings } = require('./limits.js');
+  const a4 = require('assert');
+  const ok = { alarm_temp_range: [3, 50], alarm_temp_action: 'close', alarm_pressure_range: [100, 550], alarm_pressure_action: 'close', alarm_flow_rate_range: [0, 0.06], alarm_flow_rate_action: 'close' };
+  a4.deepStrictEqual(settingsWarnings(summariseSettings(ok, null)), []);
+  a4.ok(settingsWarnings(summariseSettings({ ...ok, alarm_flow_rate_range: [75, 110] }, null))[0].includes('flow alarm'));
+  a4.ok(settingsWarnings(summariseSettings({ ...ok, alarm_pressure_range: [0, 1000] }, null))[0].includes('pressure alarm'));
+  a4.ok(settingsWarnings(summariseSettings({ ...ok, alarm_temp_action: 'none' }, null))[0].includes('not close'));
+  a4.ok(settingsWarnings(summariseSettings(null, null)).length >= 3);
+  console.log('ok warnings');
+}

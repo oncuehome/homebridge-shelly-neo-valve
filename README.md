@@ -85,6 +85,10 @@ Two files per valve in `snapshotDir`: `<host>.json` (below, written every `snaps
 - Opening or closing the valve changes the water supply to the home.
 - Tested only against firmware 2.0.1 of the `S3XT-0S` model.
 
+## Before you start: set the valve's own limits
+
+Set the valve's alarm limits first, in the Shelly app or the valve's web page (Config tab): temperature, pressure and, above all, flow, each with the action Close. Out of the box the flow limit is far too high to ever trip. The plugin never changes them, but at every start it reads them, logs them and warns in the Homebridge log ("check the valve first") if they look unset or the action is not Close.
+
 ## Tile names and the valve's alarm limits (0.5.3)
 
 **Names.** The five tiles in Apple Home are called Water Valve Switch, Water Valve Status, Water Critical Fault Sensor, Water Holiday Mode and Water Unexpected Flow Sensor. Each name can be changed in the settings (`switchName`, `statusName`, `alarmName`, `holidayName`, `suspectedLeakName`); empty uses the default.
@@ -95,3 +99,7 @@ Two files per valve in `snapshotDir`: `<host>.json` (below, written every `snaps
 
 - **Critical fault sensor:** the valve's own alarms (temperature, pressure, flow limits), set on the valve. When one trips the valve closes by itself, and this sensor shows the valve shut without being told to. The plugin cannot tell which limit tripped, nor tell it apart from a press of the button or the Shelly app.
 - **Unexpected flow sensor:** the plugin's own rules, set in the Homebridge settings: water running for too long (forgotten tap or bath), and in Holiday mode water running for a few minutes, or more than an allowance of litres in 24 hours (`holidayAllowanceLitres`, counted from the valve's water counter, so a slow leak that never makes one long run still adds up). `holidayIgnoreFrom` and `holidayIgnoreTo` (HH:MM, the Pi's clock, may cross midnight) are a daily window when holiday rules look away, for sprinklers; the normal running-too-long limit still applies in the window. The allowance clears by itself when the litres in the last 24 hours drop back under it. Both are off until set.
+
+## Units (0.5.5)
+
+`homeUnits` sets the units of the pressure and flow tiles in Apple Home: by default the same as the valve (read from its own page at start, so PSI and litres on the valve show as PSI and L/min in Home), or metric (bar, L/min) or US (PSI, gal/min). The tile names carry the unit. Snapshots, the hub status, the On Cue app and Backstage always use bar and litres. The atmospheric pressure setting stays in bar.

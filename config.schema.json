@@ -2,7 +2,7 @@
   "pluginAlias": "ShellyNeoValve",
   "pluginType": "platform",
   "singular": true,
-  "headerDisplay": "Shelly Neo Smart Water Valve (Gen3). Shows the valve in Apple Home. Optionally also shows water temperature, pressure (bar) and flow (L/min) (HomeKit has no pressure or flow sensor, so those two appear as Light Sensors: the number is the real value, labelled lux). It can also save a snapshot of the readings every few minutes to a file, for other tools to read.",
+  "headerDisplay": "Before you rely on this: set the valve's own alarm limits first, in the Shelly app or the valve's web page (Config tab): water temperature, pressure and, above all, flow, each with the action Close. They are mastered on the valve and this plugin never changes them; out of the box the flow limit is far too high to ever trip. The plugin reads them at every start, logs them, and warns here in the log if they look unset. Then choose the optional rules below. Shows the valve in Apple Home, with optional temperature, pressure and flow tiles, and saves a snapshot of the readings every few minutes for other tools to read.",
   "schema": {
     "type": "object",
     "properties": {
@@ -23,6 +23,32 @@
         "title": "Show temperature, pressure and flow in Apple Home",
         "type": "boolean",
         "default": true
+      },
+      "homeUnits": {
+        "title": "Units for pressure and flow in Apple Home",
+        "description": "Same as the valve follows the units chosen on the valve's own page, so the numbers match what you see there. Snapshots, the On Cue app and Backstage always use bar and litres.",
+        "type": "string",
+        "default": "valve",
+        "oneOf": [
+          {
+            "title": "Same as the valve",
+            "enum": [
+              "valve"
+            ]
+          },
+          {
+            "title": "Metric (bar, L/min)",
+            "enum": [
+              "metric"
+            ]
+          },
+          {
+            "title": "US (PSI, gal/min)",
+            "enum": [
+              "us"
+            ]
+          }
+        ]
       },
       "controlType": {
         "title": "Control in Apple Home",

@@ -45,7 +45,37 @@ function describeSettings(st) {
     `time zone ${st.timezone}; firmware ${st.firmware}`;
 }
 
+// Things to check on the valve before relying on it. The limits are mastered on the valve, so a valve fresh out of the box (or one whose
+// limits were never chosen) is not protecting anything: its flow limit is far above anything a house can use.
+function settingsWarnings(st) {
+  const out = [];
+  const l = st.limits || {};
+  if (!l.flow || l.flow.max === null || l.flow.max > 500) out.push('the flow alarm is far above what a house can use (or unknown), so it will never close the valve: set a realistic maximum in the Shelly app');
+  if (!l.pressure || l.pressure.max === null || l.pressure.max >= 10) out.push('the pressure alarm is very wide (or unknown): set minimum and maximum pressure in the Shelly app');
+  if (!l.temperature || l.temperature.min === null || l.temperature.max === null) out.push('the temperature alarm is unknown: set it in the Shelly app');
+  for (const n of ['temperature', 'pressure', 'flow']) if (l[n] && l[n].action && l[n].action !== 'close') out.push(`the ${n} alarm action is "${l[n].action}", not close, so the valve will not shut when it trips`);
+  return out;
+}
+
 // Everything except the read time, to tell whether the valve's settings changed since the last read.
 const settingsKey = (st) => JSON.stringify({ ...st, read_at: undefined });
 
-module.exports = { summariseSettings, describeSettings, settingsKey, LIMITS };
+// What the plugin shows in Apple Home (the pressure and flow tiles) and logs, so it matches the valve's own page. choice is the
+// plugin setting: "valve" (follow the valve's units, the default), "metric" (bar, L/min) or "us" (PSI, gal/min). The snapshot copy, the
+// hub status, the app and Backstage always use bar and litres.
+const PSI_PER_BAR = 14.5037738;
+const LITRES_PER_GALLON = 3.785411784;
+function homeUnits(choice, service) {
+  const p = String((service && service.pressure_unit) || '').toLowerCase();
+  const v = String((service && service.volume_unit) || '').toLowerCase();
+  const pick = choice === 'metric' || choice === 'us' ? choice : 'valve';
+  const pressure = pick === 'metric' ? 'bar' : pick === 'us' ? 'psi' : (p === 'psi' ? 'psi' : p === 'kpa' ? 'kpa' : 'bar');
+  const volume = pick === 'metric' ? 'L' : pick === 'us' ? 'gal' : (v.startsWith('gal') ? 'gal' : 'L');
+  return { pressure, volume };
+}
+const fromBar = (bar, unit) => (unit === 'psi' ? bar * PSI_PER_BAR : unit === 'kpa' ? bar * KPA_PER_BAR : bar);
+const fromLitres = (l, unit) => (unit === 'gal' ? l / LITRES_PER_GALLON : l);
+const pressureLabel = (unit) => (unit === 'psi' ? 'PSI' : unit === 'kpa' ? 'kPa' : 'bar');
+const flowLabel = (unit) => (unit === 'gal' ? 'gal per min' : 'L per min');
+
+module.exports = { settingsWarnings, homeUnits, fromBar, fromLitres, pressureLabel, flowLabel, summariseSettings, describeSettings, settingsKey, LIMITS };
