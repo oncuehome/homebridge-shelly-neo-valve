@@ -109,8 +109,13 @@ class ShellyNeoValvePlatform {
       .setCharacteristic(Characteristic.Model, 'Neo Smart Water Valve')
       .setCharacteristic(Characteristic.SerialNumber, host);
 
-    const sub = (type, subtype, label) =>
-      accessory.getServiceById(type, subtype) || accessory.addService(type, label, subtype);
+    // Home shows a tile or row for each service under the name in ConfiguredName (the plain Name is often ignored), so every
+    // service gets one: otherwise the three leak sensors all show up with the accessory's name and cannot be told apart.
+    const sub = (type, subtype, label) => {
+      const svc = accessory.getServiceById(type, subtype) || accessory.addService(type, label, subtype);
+      svc.setCharacteristic(Characteristic.ConfiguredName, label);
+      return svc;
+    };
 
     // The control is a plain On/Off switch by default (On = valve open): Home shows a Valve as running or in use,
     // which reads as water flowing when it only means the valve is open. "controlType": "valve" keeps the Valve tile.

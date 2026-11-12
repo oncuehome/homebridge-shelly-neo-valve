@@ -39,7 +39,7 @@ const makeService = (type) => {
 const names = ['AccessoryInformation', 'Valve', 'Switch', 'TemperatureSensor', 'LightSensor', 'ContactSensor', 'LeakSensor'];
 const Service = Object.fromEntries(names.map((n) => [n, n]));
 const charNames = ['Manufacturer', 'Model', 'SerialNumber', 'Name', 'ValveType', 'Active', 'InUse', 'On', 'CurrentTemperature',
-  'CurrentAmbientLightLevel', 'ContactSensorState', 'LeakDetected', 'StatusFault'];
+  'CurrentAmbientLightLevel', 'ContactSensorState', 'LeakDetected', 'StatusFault', 'ConfiguredName'];
 const Characteristic = Object.fromEntries(charNames.map((n) => [n, n]));
 Object.assign(Characteristic, {
   Active: Object.assign('Active', {}), });
@@ -94,6 +94,12 @@ const logs = [];
   assert.strictEqual(sw.primary, true, 'the control is the primary service');
   assert.strictEqual(sw.getCharacteristic('On').value, true);
   assert.ok(svc('ContactSensor', 'shut') && svc('LeakSensor', 'alarm') && svc('LeakSensor', 'longrun'));
+  // each service has its own name for Home to show, and the three leak/contact sensors differ
+  const label = (type, id) => svc(type, id).getCharacteristic('ConfiguredName').value;
+  assert.strictEqual(label('Switch', 'switch'), 'Water Valve');
+  assert.strictEqual(label('ContactSensor', 'shut'), 'Water Valve closed');
+  assert.strictEqual(label('LeakSensor', 'alarm'), 'Water Valve alarm');
+  assert.strictEqual(label('LeakSensor', 'longrun'), 'Water Valve running too long');
   assert.ok(!svc('TemperatureSensor', 'temp') || true);
   const leak = (id) => svc('LeakSensor', id).getCharacteristic(Characteristic.LeakDetected).value;
   const poll = timers.find((t) => t.ms === 5000).f;
