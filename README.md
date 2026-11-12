@@ -9,6 +9,7 @@ Homebridge plugin for the **Shelly Neo Smart Water Valve** (Gen3, "Powered by Sh
 | Water Valve | Switch (default) or Valve | On = water open. Reads and sets the valve's `state` component. With `controlType: "valve"` it is Home's water faucet tile instead, which shows as running whenever the valve is open, even with no water flowing |
 | Closed | Contact Sensor | Closed = water off. Home can notify on a contact sensor but not on a valve. (`valveSensors`) |
 | Alarm | Leak Sensor | Trips when the valve shuts without Home telling it to (a valve alarm, the Shelly app or the button). Clears when it opens. (`valveSensors`) |
+| Running too long | Leak Sensor | Trips when water has flowed without stopping for `alertAfterMinutes` (default 30) or `alertAfterLitres`. Stays on after a shut-off until the valve is opened again. |
 | Water temperature | Temperature Sensor | Real °C. (`homeSensors`) |
 | Water pressure in bar | Light Sensor | HomeKit has no pressure sensor. The number is the real water pressure in bar, labelled "lux" by Home. (`homeSensors`) |
 | Water flow in L per min | Light Sensor | The real L/min value, labelled "lux". (`homeSensors`) |
@@ -27,6 +28,8 @@ All sit in one accessory per valve. Tiles show a "No Response" fault if the valv
   "homeSensors": true,
   "controlType": "switch",
   "valveSensors": true,
+  "alertAfterMinutes": 30,
+  "shutOffAfterMinutes": 0,
   "atmosphericBar": 1.013,
   "snapshots": true,
   "snapshotMinutes": 10,
@@ -44,15 +47,27 @@ Reserve the valve's address in the router.
 | `homeSensors` | true | Temperature, pressure and flow tiles in Home. False removes them |
 | `controlType` | switch | `switch` (On = open) or `valve` (the faucet tile) |
 | `valveSensors` | true | The Closed and Alarm sensors. False removes them |
+| `alertAfterMinutes` | 30 | Trip the Running too long sensor after this many minutes of unbroken flow. 0 = off |
+| `alertAfterLitres` | 0 | Same, by litres in one run. 0 = off |
+| `shutOffAfterMinutes` | 0 | Close the valve after this many minutes of unbroken flow. 0 = never |
+| `shutOffAfterLitres` | 0 | Same, by litres in one run. 0 = never |
 | `atmosphericBar` | 1.013 | Subtracted from the reading when nothing flows |
 | `snapshots` | true | Keep a JSON file of readings |
 | `snapshotMinutes` | 10 | Minutes between saved rows (1 to 60) |
 | `historyDays` | 14 | Days of rows kept (1 to 90) |
 | `snapshotDir` | Homebridge storage `neo-valve` | Folder for `<host>.json` |
 
+## Running too long
+
+A run starts when the flow is above 0.05 L/min and ends once it has been zero for about 90 seconds (three polls), so a blip between polls does not split it. Minutes and litres are counted from the start of the run; litres come from the valve's own counter. A limit of 0 is off. A shut-off closes the valve with the same command Home uses, and the alert stays on until the valve is opened again. A bath or a hose left running on purpose counts as a long run, so choose limits that suit the home, and leave the shut-off off unless you want it.
+
+## Snapshot files
+
+Two files per valve in `snapshotDir`: `<host>.json` (below, written every `snapshotMinutes`) and `<host>.now` (just the newest reading, rewritten at every poll, so a reader can get a reading at most `pollSeconds` old without the history).
+
 ## Snapshot file
 
-`<snapshotDir>/<host>.json`, written atomically (mode 0644). `schema` 1, `device`, `atmospheric_bar`, `updated_at`, `latest` (the newest reading) and `history`. A row holds `t`, `ok`, `valve_open`, `flow_lpm`, `flow_peak_lpm` (highest flow since the previous row), `pressure_bar` (real), `pressure_bar_raw`, `temperature_c`, `consumption_l` (the valve's counter) and `used_l` (litres since the previous row). A row with `ok: false` means the valve did not answer. No password or personal data is stored.
+`<snapshotDir>/<host>.json`, written atomically (mode 0644). `schema` 1, `device`, `atmospheric_bar`, `updated_at`, `latest` (the newest reading, with `run` when water is running: minutes, litres, alert), `days` (per local day: litres `l` and the pressure seen `pmin`, `pmax`, `ps` sum, `pn` samples; kept for 400 days) and `history`. A row holds `t`, `ok`, `valve_open`, `flow_lpm`, `flow_peak_lpm` (highest flow since the previous row), `pressure_bar` (real), `pressure_bar_raw`, `temperature_c`, `consumption_l` (the valve's counter) and `used_l` (litres since the previous row). A row with `ok: false` means the valve did not answer. No password or personal data is stored.
 
 ## Limits
 

@@ -40,6 +40,35 @@
         "type": "boolean",
         "default": true
       },
+      "alertAfterMinutes": {
+        "title": "Alert when water has run for (minutes)",
+        "description": "Trips the 'running too long' sensor when water has flowed without stopping for this long. 0 turns it off. A bath or garden hose can take this long, so choose what is normal for the home.",
+        "type": "number",
+        "default": 30,
+        "minimum": 0,
+        "maximum": 1440
+      },
+      "alertAfterLitres": {
+        "title": "Alert when a run has used (litres)",
+        "description": "Same sensor, triggered by volume. 0 turns it off.",
+        "type": "number",
+        "default": 0,
+        "minimum": 0
+      },
+      "shutOffAfterMinutes": {
+        "title": "Shut the water off after (minutes)",
+        "description": "Closes the valve when water has flowed without stopping for this long. 0 (the default) never shuts it off. The alert stays on until the valve is opened again. This stops a burst pipe but would also cut a bath or hose left running on purpose.",
+        "type": "number",
+        "default": 0,
+        "minimum": 0
+      },
+      "shutOffAfterLitres": {
+        "title": "Shut the water off after a run has used (litres)",
+        "description": "Same, triggered by volume. 0 never shuts it off.",
+        "type": "number",
+        "default": 0,
+        "minimum": 0
+      },
       "atmosphericBar": {
         "title": "Atmospheric pressure (bar)",
         "description": "The valve shows absolute pressure while no water flows. This is subtracted to give the real water pressure. 1.013 at sea level; lower at altitude.",

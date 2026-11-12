@@ -93,3 +93,90 @@ assert.strictEqual(again.history.length, 3);
 assert.strictEqual(again.lastTotalL, 2);
 fs.rmSync(dir, { recursive: true });
 console.log('recorder ok');
+
+// ---- long-running rules
+const { RunTracker } = require('./longrun.js');
+const MIN = 60000;
+{
+  const t = new RunTracker({ alertMinutes: 30, shutOffMinutes: 90 });
+  let s = t.update(0, 0, 100);
+  assert.deepStrictEqual([s.active, s.alert, s.shutOff], [false, false, false]);
+  s = t.update(1 * MIN, 8, 100.2);                      // a tap goes on
+  assert.strictEqual(s.active, true);
+  s = t.update(20 * MIN, 8, 250);
+  assert.strictEqual(s.alert, false);                    // 19 minutes: not yet
+  s = t.update(31 * MIN, 8, 340);
+  assert.strictEqual(s.alert, true);                     // 30 minutes: alert
+  assert.strictEqual(s.shutOff, false);
+  assert.ok(Math.abs(s.litres - 239.8) < 0.2, `litres ${s.litres}`);   // from the valve's counter
+  s = t.update(92 * MIN, 8, 830);
+  assert.strictEqual(s.shutOff, true);                   // 90 minutes: shut off
+  // flow stops: still the same run for a short grace, then it ends and everything clears
+  s = t.update(92.5 * MIN, 0, 830);
+  assert.strictEqual(s.active, true);
+  s = t.update(94 * MIN, 0, 830);
+  assert.deepStrictEqual([s.active, s.ended, s.alert, s.shutOff], [false, true, false, false]);
+}
+{
+  // a blip of zero between polls does not split a run
+  const t = new RunTracker({ alertMinutes: 10 });
+  t.update(0, 5, null); t.update(5 * MIN, 5, null);
+  let s = t.update(5.5 * MIN, 0, null);
+  assert.strictEqual(s.active, true);
+  s = t.update(6 * MIN, 5, null);
+  s = t.update(11 * MIN, 5, null);
+  assert.strictEqual(s.alert, true);
+  assert.ok(Math.abs(s.litres - 55) < 6, `integrated litres ${s.litres}`);   // no counter: flow x time
+}
+{
+  // litres limit, and 0 means off
+  const t = new RunTracker({ alertMinutes: 0, alertLitres: 100 });
+  t.update(0, 10, 0); t.update(5 * MIN, 10, 50);
+  assert.strictEqual(t.update(9 * MIN, 10, 90).alert, false);
+  assert.strictEqual(t.update(11 * MIN, 10, 110).alert, true);
+  const off = new RunTracker({ alertMinutes: 0, alertLitres: 0 });
+  off.update(0, 10, 0);
+  assert.strictEqual(off.update(500 * MIN, 10, 5000).alert, false);
+  // a drip below the threshold is not a run
+  const drip = new RunTracker({ alertMinutes: 1 });
+  drip.update(0, 0.02, 0);
+  assert.strictEqual(drip.update(30 * MIN, 0.02, 1).active, false);
+}
+console.log('longrun ok');
+
+// ---- the per-poll "now" file and per-day totals
+{
+  const d2 = fs.mkdtempSync(path.join(os.tmpdir(), 'neo2-'));
+  const f2 = path.join(d2, 'v.json');
+  let ck = new Date('2026-11-11T12:00:00Z');
+  const r2 = new Recorder({ file: f2, device: { name: 'V', host: 'h' }, now: () => ck });
+  const rd = (o) => ({ open: true, flowLpm: 0, pressureBar: 4.5, temperatureC: 13, consumptionL: 100, ...o });
+  r2.observe(rd(), { minutes: 12.5, litres: 90, alert: false });
+  const nowDoc = JSON.parse(fs.readFileSync(path.join(d2, 'v.now'), 'utf8'));
+  assert.strictEqual(nowDoc.latest.pressure_bar, 3.487);
+  assert.deepStrictEqual(nowDoc.latest.run, { minutes: 12.5, litres: 90, alert: false });
+  assert.ok(!fs.existsSync(f2));                          // the history file is only written at a snapshot
+  r2.snapshot(true);
+  ck = new Date('2026-11-11T12:10:00Z');
+  r2.observe(rd({ consumptionL: 130, pressureBar: 3.9, flowLpm: 6 }));
+  r2.snapshot(true);
+  ck = new Date('2026-11-12T08:00:00Z');
+  r2.observe(rd({ consumptionL: 150 }));
+  r2.snapshot(true);
+  const doc = JSON.parse(fs.readFileSync(f2, 'utf8'));
+  assert.strictEqual(doc.days['2026-11-11'].l, 30);
+  assert.strictEqual(doc.days['2026-11-12'].l, 20);
+  assert.strictEqual(doc.days['2026-11-11'].pmin, 3.487);
+  assert.strictEqual(doc.days['2026-11-11'].pn, 2);
+  // an older file with no (or the old kind of) days is rebuilt from its rows
+  const old = JSON.parse(JSON.stringify(doc)); old.days = { '2026-11-11': 30 };
+  fs.writeFileSync(f2, JSON.stringify(old));
+  const r3 = new Recorder({ file: f2, device: { name: 'V', host: 'h' }, now: () => ck });
+  assert.strictEqual(r3.days['2026-11-11'].l, 30);
+  // days older than keepDays are dropped
+  const r4 = new Recorder({ file: path.join(d2, 'w.json'), device: { name: 'V', host: 'h' }, keepDays: 2, now: () => ck });
+  for (const day of ['08', '09', '10', '11']) { ck = new Date(`2026-11-${day}T12:00:00Z`); r4.observe(rd()); r4.snapshot(true); }
+  assert.deepStrictEqual(Object.keys(r4.days).sort(), ['2026-11-10', '2026-11-11']);
+  fs.rmSync(d2, { recursive: true });
+  console.log('now file and days ok');
+}

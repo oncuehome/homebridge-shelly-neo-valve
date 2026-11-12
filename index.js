@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const path = require('path');
 const { Recorder, gaugeBar, DEFAULT_ATMOSPHERIC_BAR } = require('./recorder.js');
+const { RunTracker } = require('./longrun.js');
 
 const PLUGIN_NAME = 'homebridge-shelly-neo-valve';
 const PLATFORM_NAME = 'ShellyNeoValve';
@@ -172,10 +173,34 @@ class ShellyNeoValvePlatform {
         if (old) accessory.removeService(old);
       }
     }
+    // Water running too long: an alert (and, if you choose, a shut-off) after a number of minutes and/or litres of
+    // flow that has not properly stopped. Limits of 0 are off. The sensor stays on after a shut-off until the valve is
+    // opened again, so the alert is not lost when the flow stops.
+    const num = (v, d) => (typeof v === 'number' && v >= 0 ? v : d);
+    const alertMinutes = num(this.config.alertAfterMinutes, 30);
+    const alertLitres = num(this.config.alertAfterLitres, 0);
+    const shutOffMinutes = num(this.config.shutOffAfterMinutes, 0);
+    const shutOffLitres = num(this.config.shutOffAfterLitres, 0);
+    const longRunRules = alertMinutes > 0 || alertLitres > 0 || shutOffMinutes > 0 || shutOffLitres > 0;
+    let longRun = null;
+    if (longRunRules) {
+      longRun = sub(Service.LeakSensor, 'longrun', `${name} running too long`);
+      longRun.setCharacteristic(Characteristic.Name, `${name} running too long`);
+    } else {
+      const old = accessory.getServiceById(Service.LeakSensor, 'longrun');
+      if (old) accessory.removeService(old);
+    }
+    const tracker = new RunTracker({
+      alertMinutes, alertLitres, shutOffMinutes, shutOffLitres,
+      graceMs: Math.max(90, 3 * Math.max(5, this.config.pollSeconds || 15)) * 1000,
+    });
+    let longRunOn = false;
+    let shutOffLatched = false;
+
     let lastCommandAt = 0;
     let alarmOn = false;
 
-    const all = [valve, temp, pressure, flow, contact, alarm].filter(Boolean);
+    const all = [valve, temp, pressure, flow, contact, alarm, longRun].filter(Boolean);
 
     // Snapshots: one reading every few minutes into a small JSON file (see recorder.js).
     const atmosphericBar = typeof this.config.atmosphericBar === 'number' ? this.config.atmosphericBar : DEFAULT_ATMOSPHERIC_BAR;
@@ -258,8 +283,25 @@ class ShellyNeoValvePlatform {
         const reading = parseComponents(await rpc('/rpc/Shelly.GetComponents?dynamic_only=true'));
         apply(reading);
         reachable = true;
+        const run = tracker.update(Date.now(), reading.flowLpm, reading.consumptionL);
+        if (longRunRules) {
+          if (reading.open && shutOffLatched && !run.active) shutOffLatched = false;   // opened again: the alert can clear
+          const was = longRunOn;
+          longRunOn = run.alert || shutOffLatched;
+          if (longRun) {
+            longRun.updateCharacteristic(Characteristic.LeakDetected, longRunOn
+              ? Characteristic.LeakDetected.LEAK_DETECTED : Characteristic.LeakDetected.LEAK_NOT_DETECTED);
+          }
+          if (longRunOn && !was) this.log.warn('%s: water has been running for %s min (%s L)', name, run.minutes, run.litres);
+          if (run.shutOff && reading.open && !shutOffLatched) {
+            shutOffLatched = true;
+            longRunOn = true;
+            this.log.warn('%s: shutting the valve after %s min / %s L of continuous flow', name, run.minutes, run.litres);
+            try { await command(false); } catch (e) { shutOffLatched = false; /* command() already logged it; try again next poll */ }
+          }
+        }
         if (recorder) {
-          recorder.observe(reading);
+          recorder.observe(reading, run.active || longRunOn ? { minutes: run.minutes, litres: run.litres, alert: longRunOn } : null);
           // Record the first good reading at once, so there is a snapshot as soon as the plugin starts.
           if (!firstSnapshotDone) { firstSnapshotDone = true; recorder.snapshot(true); }
         }
