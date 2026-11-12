@@ -24,6 +24,16 @@
         "type": "boolean",
         "default": true
       },
+      "controlType": {
+        "title": "Control in Apple Home",
+        "description": "Switch: a plain On/Off switch, On = water open. Valve: Home's water faucet tile, which shows as running or in use whenever the valve is open, even with no water flowing.",
+        "type": "string",
+        "default": "switch",
+        "oneOf": [
+          { "title": "Switch (On = open)", "enum": ["switch"] },
+          { "title": "Valve (faucet tile)", "enum": ["valve"] }
+        ]
+      },
       "valveSensors": {
         "title": "Add a Closed sensor and an Alarm sensor to Apple Home",
         "description": "Home cannot notify when a valve changes. Closed is a contact sensor (Closed = water off). Alarm trips when the valve shuts without Home telling it to (a valve alarm, the Shelly app or the button), and clears when it opens. Turn on notifications for them in the Home app.",

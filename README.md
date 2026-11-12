@@ -6,7 +6,7 @@ Homebridge plugin for the **Shelly Neo Smart Water Valve** (Gen3, "Powered by Sh
 
 | Accessory | HomeKit service | Notes |
 |---|---|---|
-| Valve (open/close) | Valve, shown as a water faucet | Reads and sets the valve's `state` component. "In use" follows open, so Home shows On, not Starting |
+| Water Valve | Switch (default) or Valve | On = water open. Reads and sets the valve's `state` component. With `controlType: "valve"` it is Home's water faucet tile instead, which shows as running whenever the valve is open, even with no water flowing |
 | Closed | Contact Sensor | Closed = water off. Home can notify on a contact sensor but not on a valve. (`valveSensors`) |
 | Alarm | Leak Sensor | Trips when the valve shuts without Home telling it to (a valve alarm, the Shelly app or the button). Clears when it opens. (`valveSensors`) |
 | Water temperature | Temperature Sensor | Real °C. (`homeSensors`) |
@@ -25,6 +25,7 @@ All sit in one accessory per valve. Tiles show a "No Response" fault if the valv
   "name": "Shelly Neo Valve",
   "pollSeconds": 15,
   "homeSensors": true,
+  "controlType": "switch",
   "valveSensors": true,
   "atmosphericBar": 1.013,
   "snapshots": true,
@@ -41,6 +42,7 @@ Reserve the valve's address in the router.
 |---|---|---|
 | `pollSeconds` | 15 | How often the valve is read (5 to 300) |
 | `homeSensors` | true | Temperature, pressure and flow tiles in Home. False removes them |
+| `controlType` | switch | `switch` (On = open) or `valve` (the faucet tile) |
 | `valveSensors` | true | The Closed and Alarm sensors. False removes them |
 | `atmosphericBar` | 1.013 | Subtracted from the reading when nothing flows |
 | `snapshots` | true | Keep a JSON file of readings |

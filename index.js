@@ -111,9 +111,22 @@ class ShellyNeoValvePlatform {
     const sub = (type, subtype, label) =>
       accessory.getServiceById(type, subtype) || accessory.addService(type, label, subtype);
 
-    const valve = sub(Service.Valve, 'valve', name);
-    valve.setCharacteristic(Characteristic.Name, name);
-    valve.setCharacteristic(Characteristic.ValveType, Characteristic.ValveType.WATER_FAUCET);
+    // The control is a plain On/Off switch by default (On = valve open): Home shows a Valve as running or in use,
+    // which reads as water flowing when it only means the valve is open. "controlType": "valve" keeps the Valve tile.
+    const asSwitch = this.config.controlType !== 'valve';
+    const oldValve = accessory.getServiceById(Service.Valve, 'valve');
+    const oldSwitch = accessory.getServiceById(Service.Switch, 'switch');
+    let valve;
+    if (asSwitch) {
+      if (oldValve) accessory.removeService(oldValve);
+      valve = sub(Service.Switch, 'switch', name);
+      valve.setCharacteristic(Characteristic.Name, name);
+    } else {
+      if (oldSwitch) accessory.removeService(oldSwitch);
+      valve = sub(Service.Valve, 'valve', name);
+      valve.setCharacteristic(Characteristic.Name, name);
+      valve.setCharacteristic(Characteristic.ValveType, Characteristic.ValveType.WATER_FAUCET);
+    }
 
     // By default the readings also appear in Home (HomeKit has no pressure or flow sensor, so those two are
     // light sensors). Set "homeSensors": false to keep only the valve in Home and read the rest elsewhere.
@@ -215,11 +228,15 @@ class ShellyNeoValvePlatform {
         alarm.updateCharacteristic(Characteristic.LeakDetected, alarmOn
           ? Characteristic.LeakDetected.LEAK_DETECTED : Characteristic.LeakDetected.LEAK_NOT_DETECTED);
       }
-      const active = r.open ? Characteristic.Active.ACTIVE : Characteristic.Active.INACTIVE;
-      valve.updateCharacteristic(Characteristic.Active, active);
-      // InUse follows the valve, not the flow reading: Active on with InUse off shows "Starting..." in Home.
-      valve.updateCharacteristic(Characteristic.InUse,
-        r.open ? Characteristic.InUse.IN_USE : Characteristic.InUse.NOT_IN_USE);
+      if (asSwitch) {
+        valve.updateCharacteristic(Characteristic.On, r.open);
+      } else {
+        const active = r.open ? Characteristic.Active.ACTIVE : Characteristic.Active.INACTIVE;
+        valve.updateCharacteristic(Characteristic.Active, active);
+        // InUse follows the valve, not the flow reading: Active on with InUse off shows "Starting..." in Home.
+        valve.updateCharacteristic(Characteristic.InUse,
+          r.open ? Characteristic.InUse.IN_USE : Characteristic.InUse.NOT_IN_USE);
+      }
       if (homeSensors) {
         temp.updateCharacteristic(Characteristic.CurrentTemperature, r.temperatureC);
         pressure.updateCharacteristic(Characteristic.CurrentAmbientLightLevel,
@@ -252,28 +269,40 @@ class ShellyNeoValvePlatform {
       }
     };
 
-    valve.getCharacteristic(Characteristic.InUse)
-      .onGet(() => (state.open === true ? Characteristic.InUse.IN_USE : Characteristic.InUse.NOT_IN_USE));
-    valve.getCharacteristic(Characteristic.Active)
-      .onGet(() => (state.open === true ? Characteristic.Active.ACTIVE : Characteristic.Active.INACTIVE))
-      .onSet(async (v) => {
-        const want = v === Characteristic.Active.ACTIVE;
-        lastCommandAt = Date.now();
-        try {
-          await rpc('/rpc/Boolean.Set', { id: state.id, value: want });
-        } catch (e) {
-          this.log.error('%s: could not %s the valve: %s', name, want ? 'open' : 'close', e.message || e);
-          throw new this.api.hap.HapStatusError(this.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
-        }
-        this.log.info('%s: valve %s', name, want ? 'opened' : 'closed');
-        state.open = want;
-        // Home ignores an InUse change that arrives before it has the write response, and then sits on
-        // "Starting"/"Stopping". Send it just after, and again once the next poll has confirmed the state.
-        const inUse = () => valve.updateCharacteristic(Characteristic.InUse,
-          state.open ? Characteristic.InUse.IN_USE : Characteristic.InUse.NOT_IN_USE);
-        setTimeout(inUse, 700);
-        setTimeout(poll, 1500);
-      });
+    const command = async (want) => {
+      lastCommandAt = Date.now();
+      try {
+        await rpc('/rpc/Boolean.Set', { id: state.id, value: want });
+      } catch (e) {
+        this.log.error('%s: could not %s the valve: %s', name, want ? 'open' : 'close', e.message || e);
+        throw new this.api.hap.HapStatusError(this.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
+      }
+      this.log.info('%s: valve %s', name, want ? 'opened' : 'closed');
+      state.open = want;
+    };
+
+    if (asSwitch) {
+      valve.getCharacteristic(Characteristic.On)
+        .onGet(() => state.open === true)
+        .onSet(async (v) => {
+          await command(v === true);
+          setTimeout(poll, 1500);
+        });
+    } else {
+      valve.getCharacteristic(Characteristic.InUse)
+        .onGet(() => (state.open === true ? Characteristic.InUse.IN_USE : Characteristic.InUse.NOT_IN_USE));
+      valve.getCharacteristic(Characteristic.Active)
+        .onGet(() => (state.open === true ? Characteristic.Active.ACTIVE : Characteristic.Active.INACTIVE))
+        .onSet(async (v) => {
+          await command(v === Characteristic.Active.ACTIVE);
+          // Home ignores an InUse change that arrives before it has the write response, and then sits on
+          // "Starting"/"Stopping". Send it just after, and again once the next poll has confirmed the state.
+          const inUse = () => valve.updateCharacteristic(Characteristic.InUse,
+            state.open ? Characteristic.InUse.IN_USE : Characteristic.InUse.NOT_IN_USE);
+          setTimeout(inUse, 700);
+          setTimeout(poll, 1500);
+        });
+    }
 
     poll();
     this.timers.push(setInterval(poll, Math.max(5, this.config.pollSeconds || 15) * 1000));
