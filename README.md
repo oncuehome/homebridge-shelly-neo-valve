@@ -1,105 +1,131 @@
-# homebridge-shelly-neo-valve
+# Homebridge Shelly Neo Water Valve
 
-Homebridge plugin for the **Shelly Neo Smart Water Valve** (Gen3, "Powered by Shelly" XT1, app `neo-water-valve-advanced`). It talks to the valve over its local HTTP RPC interface; no cloud and no MQTT.
+Puts the **Shelly Neo Smart Water Valve** (Gen3, "Powered by Shelly" XT1) into Apple Home, adds alarms you can get notifications for, and watches for the kind of trouble a plain valve cannot: a tap or bath left running, or a slow leak while the house is empty. It talks to the valve over your home network. No cloud, no MQTT.
 
-## What shows up in Apple Home
+<!-- IMAGE: hero - the tiles in Apple Home -->
 
-| Accessory | HomeKit service | Notes |
+## What you get
+
+One accessory in Apple Home with these tiles. Every name can be changed in the plugin settings.
+
+| Tile | What it is | Use it for |
 |---|---|---|
-| Water Valve | Switch (default) or Valve | On = water open. Reads and sets the valve's `state` component. With `controlType: "valve"` it is Home's water faucet tile instead, which shows as running whenever the valve is open, even with no water flowing |
-| Closed | Contact Sensor | Closed = water off. Home can notify on a contact sensor but not on a valve. (`valveSensors`) |
-| Alarm | Leak Sensor | Trips when the valve shuts without Home telling it to (a valve alarm, the Shelly app or the button). Clears when it opens. (`valveSensors`) |
-| Running too long | Leak Sensor | Trips when water has flowed without stopping for `alertAfterMinutes` (default 30) or `alertAfterLitres`. Stays on after a shut-off until the valve is opened again. |
-| Holiday mode | Switch | While on, water running for `holidayAlertMinutes` (default 3) trips the Running too long sensor, and for `holidayShutOffMinutes` (default 0 = never) closes the valve. Remembered across restarts. |
-| Water temperature | Temperature Sensor | Real °C. (`homeSensors`) |
-| Water pressure in bar | Light Sensor | HomeKit has no pressure sensor. The number is the real water pressure in bar, labelled "lux" by Home. (`homeSensors`) |
-| Water flow in L per min | Light Sensor | The real L/min value, labelled "lux". (`homeSensors`) |
+| **Water Valve Switch** | On/Off switch. On = water open | Turning the mains water off and on |
+| **Water Valve Status** | Contact sensor. Closed = water off | A notification whenever the water is switched off or on |
+| **Water Critical Fault Sensor** | Leak sensor | The valve closed **by itself** (one of the valve's own alarms) |
+| **Water Unexpected Flow Sensor** | Leak sensor | Water running longer than it should: forgotten tap or bath, or a slow leak in Holiday mode |
+| **Water Holiday Mode** | Switch | Turn on when the home is empty: any water running becomes an alarm |
+| Water temperature, pressure, flow | Sensors (optional) | The numbers. Home has no pressure or flow sensor, so those two appear as light sensors: the number is the real value (Home labels it "lux") |
 
-All sit in one accessory per valve. Tiles show a "No Response" fault if the valve is unreachable.
+<!-- IMAGE: tiles - the five tiles in Apple Home, named -->
 
-**Pressure:** the valve shows absolute pressure while no water flows (Shelly's FAQ), so the plugin subtracts atmospheric pressure (default 1.013 bar) at zero flow. The raw value is kept in the snapshot file.
+## The two kinds of alarm
 
-## Config
+- **Critical fault** is the valve's own protection. You set temperature, pressure and flow limits **on the valve**. If a reading goes outside a limit the valve closes the water itself, even if Homebridge, your Wi-Fi or the internet is down. The plugin then turns the Critical Fault sensor on. It cannot tell which limit tripped, and it looks the same as someone pressing the button on the valve.
+- **Unexpected flow** is the plugin's own watch, set in the Homebridge settings:
+  - *Running too long:* water that has not stopped for 30 minutes (you choose), or has used a set number of litres.
+  - *Holiday mode:* with the switch on, water running for just 3 minutes (you choose) is an alarm. It can also add up the litres used in the last 24 hours and alarm over an allowance, which catches slow leaks that never make one long run. A daily time window lets sprinklers run without an alarm.
+  - Either rule can be set to close the valve too (off by default).
 
-```json
-{
-  "platform": "ShellyNeoValve",
-  "name": "Shelly Neo Valve",
-  "pollSeconds": 15,
-  "homeSensors": true,
-  "controlType": "switch",
-  "valveSensors": true,
-  "alertAfterMinutes": 30,
-  "shutOffAfterMinutes": 0,
-  "holidayMode": true,
-  "holidayAlertMinutes": 3,
-  "holidayShutOffMinutes": 0,
-  "atmosphericBar": 1.013,
-  "snapshots": true,
-  "snapshotMinutes": 10,
-  "historyDays": 14,
-  "snapshotDir": "/var/lib/oncue/water",
-  "devices": [{ "name": "Water Valve", "host": "192.168.1.50", "username": "admin", "password": "..." }]
-}
-```
+## Before you start: set up the valve itself
 
-Reserve the valve's address in the router.
+Do this first, with the valve's own app or web page. The plugin never changes these settings; it only reads them and warns you in the Homebridge log if they look unset.
 
-| Option | Default | Meaning |
-|---|---|---|
-| `pollSeconds` | 15 | How often the valve is read (5 to 300) |
-| `homeSensors` | true | Temperature, pressure and flow tiles in Home. False removes them |
-| `controlType` | switch | `switch` (On = open) or `valve` (the faucet tile) |
-| `valveSensors` | true | The Closed and Alarm sensors. False removes them |
-| `alertAfterMinutes` | 30 | Trip the Running too long sensor after this many minutes of unbroken flow. 0 = off |
-| `alertAfterLitres` | 0 | Same, by litres in one run. 0 = off |
-| `shutOffAfterMinutes` | 0 | Close the valve after this many minutes of unbroken flow. 0 = never |
-| `shutOffAfterLitres` | 0 | Same, by litres in one run. 0 = never |
-| `holidayMode` | true | Adds the Holiday mode switch. False removes it |
-| `holidayAlertMinutes` | 3 | In holiday mode, trip the Running too long sensor after this many minutes of unbroken flow |
-| `holidayShutOffMinutes` | 0 | In holiday mode, close the valve after this many minutes. 0 = never; 10 suits an empty home |
-| `atmosphericBar` | 1.013 | Subtracted from the reading when nothing flows |
-| `snapshots` | true | Keep a JSON file of readings |
-| `snapshotMinutes` | 10 | Minutes between saved rows (1 to 60) |
-| `historyDays` | 14 | Days of rows kept (1 to 90) |
-| `snapshotDir` | Homebridge storage `neo-valve` | Folder for `<host>.json` |
+1. Add the valve to your Wi-Fi and give it a **fixed address** (reserve it in your router).
+2. Set a **device password**, and note the username (admin) and password: the plugin needs them.
+3. Check the **location and time zone** are right.
+4. On the valve's **Config** tab set the three alarms, each with the action **Close**:
 
-## Running too long
+   | Alarm | Suggested | Why |
+   |---|---|---|
+   | Flow | Maximum a little above the most the home uses at once (for example a shower and two toilets), not the factory value | Catches a burst pipe. Out of the box this limit is far too high ever to trip |
+   | Pressure | Minimum a little under normal, maximum about 5.5 bar | Catches a mains failure or a regulator fault. The valve shows absolute pressure, about 1 bar above a gauge |
+   | Temperature | 3 to 50 °C | Frost, or a hot supply where there should not be one |
 
-A run starts when the flow is above 0.05 L/min and ends once it has been zero for about 90 seconds (three polls), so a blip between polls does not split it. Minutes and litres are counted from the start of the run; litres come from the valve's own counter. A limit of 0 is off. A shut-off closes the valve with the same command Home uses, and the alert stays on until the valve is opened again. A bath or a hose left running on purpose counts as a long run, so choose limits that suit the home, and leave the shut-off off unless you want it.
+   Leave "on power restored" as **Nothing** so the valve stays as it was after a power cut.
 
-Holiday mode uses the same sensor and the same run counting, with its own (shorter) limits, and the shut-off latches the same way. The snapshot's `latest` carries `holiday: true` while it is on, so the hub status can show it.
+<!-- IMAGE: shelly-config - the valve's Config tab with the three alarms -->
 
-## Snapshot files
+## Install
+
+1. In the Homebridge UI open **Plugins**, search for `homebridge-shelly-neo-valve` and install it.
+2. Open the plugin's **Settings**. Under **Valves** add the valve: a name, its address, `admin`, and the password.
+3. Leave the other options as they are for now. Save.
+4. Restart Homebridge. Run the plugin as a **child bridge** if the UI offers it. Add the new bridge to Apple Home with the code from the Homebridge UI.
+5. Check the Homebridge log. You should see a line like:
+   `valve settings: temperature 3 to 50 C (close), pressure 1 to 5.5 bar (close), flow 0 to 60 L/min (close)`.
+   If you see **"check the valve first"**, the valve's limits are not set properly yet: go back to the previous section.
+
+<!-- IMAGE: homebridge-settings - the plugin settings with the valve added -->
+
+## Set up notifications in Apple Home
+
+The alarms only tell you something if Home sends a notification. For each of **Water Critical Fault Sensor** and **Water Unexpected Flow Sensor** (and **Water Valve Status** if you want to know when the water is switched off): press and hold the tile, open **Settings**, then **Status & Notifications**, and turn on notifications. Home treats them as leak sensors, so they are loud.
+
+<!-- IMAGE: home-notifications - the Home notification setting for a sensor -->
+
+## Using it
+
+- **Normal days:** nothing to do. The Switch shows and controls the water.
+- **Going away:** turn on **Water Holiday Mode**, by hand or with a Home automation when the last person leaves. Turn it off when you are back.
+- **After an alarm:** find the cause first. The Critical Fault sensor clears when the valve is opened again. The Unexpected Flow sensor clears when the flow stops (or, if the plugin shut the valve, when you open it again).
+
+## Settings you may want
+
+All are optional and in the plugin settings. Defaults in brackets.
+
+| Setting | What it does |
+|---|---|
+| Alert when water has run for (30 min) | Unexpected flow after this long without stopping. 0 turns it off |
+| Alert when a run has used (0 L) | The same, by litres |
+| Shut the water off after (0 = never) | Close the valve after this many minutes or litres of unbroken flow. This also stops a bath left running on purpose |
+| Holiday mode alert after (3 min) | How soon water running counts in Holiday mode |
+| Holiday mode shut off after (0 = never) | 10 minutes suits an empty home |
+| Holiday allowance, litres in 24 hours (0 = off) | Slow leak alarm. Choose a little above what an empty home really uses |
+| Holiday ignore from / until (empty) | Daily window, for sprinklers, for example 05:00 to 07:00. The normal running-too-long limit still applies |
+| Units in Apple Home (same as the valve) | Pressure and flow in bar and L/min, or PSI and gal/min. Matches the valve's own page by default |
+| Tile names | Rename any of the five tiles |
+| Control in Apple Home (switch) | A plain On/Off switch. The alternative is Home's faucet tile, which shows as "running" whenever the valve is open, even with no water flowing |
+
+## If something is not right
+
+| You see | What it means |
+|---|---|
+| Tiles show "No Response" | The plugin cannot reach the valve: check its address, power and Wi-Fi, and the password |
+| "the valve refused the username/password" in the log | The username or password in the plugin settings does not match the valve |
+| "check the valve first" in the log | The valve's own limits look unset, or their action is not Close: set them on the valve |
+| "the valve's settings changed" in the log | Someone changed a setting on the valve. Make sure it was intended |
+| Pressure looks about 1 bar high on the valve's page | The valve reports absolute pressure at zero flow; the plugin and Home show the real (gauge) pressure |
+| An old tile name stays | Close and reopen the Home app. Home sometimes keeps old names for a while |
+
+## Good to know
+
+- Opening or closing the valve changes the water supply to the home. Test alarms when someone can open the valve again.
+- The valve's own limits protect you even when everything else is down. The plugin's Unexpected Flow rules need Homebridge running.
+- Tested with firmware 2.0.1 of the `S3XT-0S` model.
+
+---
+
+## For installers and integrators
+
+The plugin saves a snapshot of the readings every few minutes to a small JSON file, for other tools to read (the On Cue hub reads it). It also keeps a copy of the valve's own settings beside the readings, so a reading can be understood against the limits and units the valve had at the time. No password or personal data is stored.
+
+- **Units:** snapshots always use bar (real, gauge pressure; the raw value is kept), litres and °C. The valve itself stores pressure in kPa (absolute) and flow in m³/min, and shows flow as L/min x1000 on its page. The atmospheric pressure setting (1.013 bar) is what is subtracted at zero flow.
+- **Running too long:** a run starts when flow is above 0.05 L/min and ends once it has been zero for about 90 seconds, so a blip between polls does not split it. Litres come from the valve's own counter. The Holiday allowance adds litres from the counter over the last 24 hours, only while Holiday mode is on and outside the ignore window.
+- **Alarm sensor:** the valve does not say why it closed, so the Critical Fault sensor is inferred: the valve was open and is now closed, and the plugin did not command it in the last minute.
+
+### Snapshot files
 
 Two files per valve in `snapshotDir`: `<host>.json` (below, written every `snapshotMinutes`) and `<host>.now` (just the newest reading, rewritten at every poll, so a reader can get a reading at most `pollSeconds` old without the history).
 
-## Snapshot file
+### Snapshot file format
 
 `<snapshotDir>/<host>.json`, written atomically (mode 0644). `schema` 1, `device`, `atmospheric_bar`, `updated_at`, `latest` (the newest reading, with `run` when water is running: minutes, litres, alert), `days` (per local day: litres `l` and the pressure seen `pmin`, `pmax`, `ps` sum, `pn` samples; kept for 400 days) and `history`. A row holds `t`, `ok`, `valve_open`, `flow_lpm`, `flow_peak_lpm` (highest flow since the previous row), `pressure_bar` (real), `pressure_bar_raw`, `temperature_c`, `consumption_l` (the valve's counter) and `used_l` (litres since the previous row). A row with `ok: false` means the valve did not answer. No password or personal data is stored.
 
-## Limits
+### Limits
 
 - Password: set `username` (default `admin`) and `password` per device. The plugin answers the valve's HTTP digest (SHA-256) challenge, the same scheme as the other Shelly devices. With no password set on the valve, leave them out. Digest over HTTP is not encrypted, so pair it with network isolation.
 - The valve's own alarm limits (temperature, pressure, flow) are set in the Shelly app, not here. The valve does not say why it closed, so the Alarm sensor is inferred.
 - Opening or closing the valve changes the water supply to the home.
 - Tested only against firmware 2.0.1 of the `S3XT-0S` model.
 
-## Before you start: set the valve's own limits
-
-Set the valve's alarm limits first, in the Shelly app or the valve's web page (Config tab): temperature, pressure and, above all, flow, each with the action Close. Out of the box the flow limit is far too high to ever trip. The plugin never changes them, but at every start it reads them, logs them and warns in the Homebridge log ("check the valve first") if they look unset or the action is not Close.
-
-## Tile names and the valve's alarm limits (0.5.3)
-
-**Names.** The five tiles in Apple Home are called Water Valve Switch, Water Valve Status, Water Critical Fault Sensor, Water Holiday Mode and Water Unexpected Flow Sensor. Each name can be changed in the settings (`switchName`, `statusName`, `alarmName`, `holidayName`, `suspectedLeakName`); empty uses the default.
-
-**The valve's own settings.** The alarm limits (temperature, pressure, flow), the display units, what the valve does when power returns and its time zone are set on the valve, in the Shelly app or web page. The plugin never changes them. At every start, and every six hours, it reads them, writes them to the Homebridge log, and keeps a copy (`valve_settings`) beside the readings in the snapshot file, so a reading can be understood against the settings the valve had. A change made on the valve is logged as a warning. Pressure is in bar and flow in L/min in the copy; the valve itself stores flow in a unit 1000 times smaller and shows it as L/min x1000 on its page.
-
-## Two kinds of alarm (0.5.5)
-
-- **Critical fault sensor:** the valve's own alarms (temperature, pressure, flow limits), set on the valve. When one trips the valve closes by itself, and this sensor shows the valve shut without being told to. The plugin cannot tell which limit tripped, nor tell it apart from a press of the button or the Shelly app.
-- **Unexpected flow sensor:** the plugin's own rules, set in the Homebridge settings: water running for too long (forgotten tap or bath), and in Holiday mode water running for a few minutes, or more than an allowance of litres in 24 hours (`holidayAllowanceLitres`, counted from the valve's water counter, so a slow leak that never makes one long run still adds up). `holidayIgnoreFrom` and `holidayIgnoreTo` (HH:MM, the Pi's clock, may cross midnight) are a daily window when holiday rules look away, for sprinklers; the normal running-too-long limit still applies in the window. The allowance clears by itself when the litres in the last 24 hours drop back under it. Both are off until set.
-
-## Units (0.5.5)
-
-`homeUnits` sets the units of the pressure and flow tiles in Apple Home: by default the same as the valve (read from its own page at start, so PSI and litres on the valve show as PSI and L/min in Home), or metric (bar, L/min) or US (PSI, gal/min). The tile names carry the unit. Snapshots, the hub status, the On Cue app and Backstage always use bar and litres. The atmospheric pressure setting stays in bar.
