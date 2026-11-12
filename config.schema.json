@@ -30,8 +30,18 @@
         "type": "string",
         "default": "switch",
         "oneOf": [
-          { "title": "Switch (On = open)", "enum": ["switch"] },
-          { "title": "Valve (faucet tile)", "enum": ["valve"] }
+          {
+            "title": "Switch (On = open)",
+            "enum": [
+              "switch"
+            ]
+          },
+          {
+            "title": "Valve (faucet tile)",
+            "enum": [
+              "valve"
+            ]
+          }
         ]
       },
       "valveSensors": {
@@ -119,6 +129,74 @@
         "title": "Folder for the snapshot file",
         "description": "Leave empty to use a neo-valve folder inside Homebridge's storage folder.",
         "type": "string"
+      },
+      "switchName": {
+        "title": "Name of the On/Off switch in Apple Home",
+        "type": "string",
+        "placeholder": "Water Valve Switch",
+        "description": "Empty uses \"Water Valve Switch\"."
+      },
+      "statusName": {
+        "title": "Name of the Closed sensor",
+        "type": "string",
+        "placeholder": "Water Valve Status",
+        "description": "Empty uses \"Water Valve Status\"."
+      },
+      "alarmName": {
+        "title": "Name of the valve alarm sensor",
+        "type": "string",
+        "placeholder": "Water Leak Alarm",
+        "description": "Empty uses \"Water Leak Alarm\"."
+      },
+      "holidayName": {
+        "title": "Name of the Holiday mode switch",
+        "type": "string",
+        "placeholder": "Water Holiday Mode",
+        "description": "Empty uses \"Water Holiday Mode\"."
+      },
+      "suspectedLeakName": {
+        "title": "Name of the running-too-long sensor",
+        "type": "string",
+        "placeholder": "Water Suspected Leak Alarm",
+        "description": "Empty uses \"Water Suspected Leak Alarm\"."
+      },
+      "limitTempMin": {
+        "title": "Valve alarm: lowest water temperature (°C)",
+        "type": "number",
+        "description": "The valve's own alarm limits. Leave all of these empty to leave the valve's settings alone; the plugin logs the valve's current limits at every start. Outside a range the valve closes. Fill in only the ones to change.",
+        "minimum": -20,
+        "maximum": 100
+      },
+      "limitTempMax": {
+        "title": "Valve alarm: highest water temperature (°C)",
+        "type": "number",
+        "minimum": -20,
+        "maximum": 100
+      },
+      "limitPressureMinBar": {
+        "title": "Valve alarm: lowest pressure (bar)",
+        "type": "number",
+        "description": "As the valve reads it: absolute pressure while no water flows, so about 1 bar above the gauge figure.",
+        "minimum": 0,
+        "maximum": 10
+      },
+      "limitPressureMaxBar": {
+        "title": "Valve alarm: highest pressure (bar)",
+        "type": "number",
+        "minimum": 0,
+        "maximum": 10
+      },
+      "limitFlowMin": {
+        "title": "Valve alarm: lowest flow (L/min)",
+        "type": "number",
+        "minimum": 0,
+        "maximum": 500
+      },
+      "limitFlowMax": {
+        "title": "Valve alarm: highest flow (L/min)",
+        "type": "number",
+        "minimum": 0,
+        "maximum": 500
       },
       "devices": {
         "title": "Valves",

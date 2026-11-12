@@ -180,3 +180,18 @@ console.log('longrun ok');
   fs.rmSync(d2, { recursive: true });
   console.log('now file and days ok');
 }
+
+// --- valve alarm limits (limits.js) ---
+{
+  const { planLimits, describeLimits } = require('./limits.js');
+  const assert2 = require('assert');
+  const cur = { alarm_temp_range: [3, 50], alarm_pressure_range: [100, 550], alarm_flow_rate_range: [75, 110] };
+  assert2.deepStrictEqual(planLimits({}, cur), { changes: {}, notes: [] });
+  assert2.deepStrictEqual(planLimits({ limitPressureMinBar: 1.5 }, cur).changes, { alarm_pressure_range: [150, 550] });
+  assert2.deepStrictEqual(planLimits({ limitTempMin: 3, limitTempMax: 50 }, cur).changes, {});
+  assert2.ok(planLimits({ limitFlowMin: 100, limitFlowMax: 90 }, cur).notes[0].includes('must be below'));
+  assert2.ok(planLimits({ limitPressureMaxBar: 50 }, cur).notes[0].includes('outside'));
+  assert2.ok(planLimits({ limitTempMin: 5 }, {}).notes[0].includes('could not be read'));
+  assert2.strictEqual(describeLimits(cur), 'temperature 3 to 50 C, pressure 1 to 5.5 bar, flow 75 to 110 L/min');
+  console.log('ok limits');
+}

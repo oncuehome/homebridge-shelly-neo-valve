@@ -96,10 +96,10 @@ const logs = [];
   assert.ok(svc('ContactSensor', 'shut') && svc('LeakSensor', 'alarm') && svc('LeakSensor', 'longrun'));
   // each service has its own name for Home to show, and the three leak/contact sensors differ
   const label = (type, id) => svc(type, id).getCharacteristic('ConfiguredName').value;
-  assert.strictEqual(label('Switch', 'switch'), 'Water Valve');
-  assert.strictEqual(label('ContactSensor', 'shut'), 'Water Valve closed');
-  assert.strictEqual(label('LeakSensor', 'alarm'), 'Water Valve alarm');
-  assert.strictEqual(label('LeakSensor', 'longrun'), 'Water Valve running too long');
+  assert.strictEqual(label('Switch', 'switch'), 'Water Valve Switch');
+  assert.strictEqual(label('ContactSensor', 'shut'), 'Water Valve Status');
+  assert.strictEqual(label('LeakSensor', 'alarm'), 'Water Leak Alarm');
+  assert.strictEqual(label('LeakSensor', 'longrun'), 'Water Suspected Leak Alarm');
   assert.ok(!svc('TemperatureSensor', 'temp') || true);
   const leak = (id) => svc('LeakSensor', id).getCharacteristic(Characteristic.LeakDetected).value;
   const poll = timers.find((t) => t.ms === 5000).f;
@@ -128,7 +128,7 @@ const logs = [];
   // holiday mode: much shorter limits while it is on, remembered, and shown in the "now" file
   const hol = svc('Switch', 'holiday');
   assert.ok(hol, 'a holiday switch');
-  assert.strictEqual(label('Switch', 'holiday'), 'Water Valve holiday mode');
+  assert.strictEqual(label('Switch', 'holiday'), 'Water Holiday Mode');
   assert.strictEqual(hol.getCharacteristic('On').value, false);
   valve.flow = 0;
   for (let i = 0; i < 3; i++) await tick(2);                // any earlier run ends

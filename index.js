@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const path = require('path');
 const { Recorder, gaugeBar, DEFAULT_ATMOSPHERIC_BAR } = require('./recorder.js');
 const { RunTracker } = require('./longrun.js');
+const { planLimits, describeLimits } = require('./limits.js');
 
 const PLUGIN_NAME = 'homebridge-shelly-neo-valve';
 const PLATFORM_NAME = 'ShellyNeoValve';
@@ -120,17 +121,24 @@ class ShellyNeoValvePlatform {
     // The control is a plain On/Off switch by default (On = valve open): Home shows a Valve as running or in use,
     // which reads as water flowing when it only means the valve is open. "controlType": "valve" keeps the Valve tile.
     const asSwitch = this.config.controlType !== 'valve';
+    // Tile names in Apple Home. Each can be changed in the settings; empty means the default.
+    const label = (key, dflt) => (typeof this.config[key] === 'string' && this.config[key].trim() ? this.config[key].trim() : dflt);
+    const switchName = label('switchName', 'Water Valve Switch');
+    const statusName = label('statusName', 'Water Valve Status');
+    const alarmName = label('alarmName', 'Water Leak Alarm');
+    const holidayName = label('holidayName', 'Water Holiday Mode');
+    const suspectedName = label('suspectedLeakName', 'Water Suspected Leak Alarm');
     const oldValve = accessory.getServiceById(Service.Valve, 'valve');
     const oldSwitch = accessory.getServiceById(Service.Switch, 'switch');
     let valve;
     if (asSwitch) {
       if (oldValve) accessory.removeService(oldValve);
-      valve = sub(Service.Switch, 'switch', name);
-      valve.setCharacteristic(Characteristic.Name, name);
+      valve = sub(Service.Switch, 'switch', switchName);
+      valve.setCharacteristic(Characteristic.Name, switchName);
     } else {
       if (oldSwitch) accessory.removeService(oldSwitch);
-      valve = sub(Service.Valve, 'valve', name);
-      valve.setCharacteristic(Characteristic.Name, name);
+      valve = sub(Service.Valve, 'valve', switchName);
+      valve.setCharacteristic(Characteristic.Name, switchName);
       valve.setCharacteristic(Characteristic.ValveType, Characteristic.ValveType.WATER_FAUCET);
     }
 
@@ -168,10 +176,10 @@ class ShellyNeoValvePlatform {
     const valveSensors = this.config.valveSensors !== false;
     let contact, alarm;
     if (valveSensors) {
-      contact = sub(Service.ContactSensor, 'shut', `${name} closed`);
-      contact.setCharacteristic(Characteristic.Name, `${name} closed`);
-      alarm = sub(Service.LeakSensor, 'alarm', `${name} alarm`);
-      alarm.setCharacteristic(Characteristic.Name, `${name} alarm`);
+      contact = sub(Service.ContactSensor, 'shut', statusName);
+      contact.setCharacteristic(Characteristic.Name, statusName);
+      alarm = sub(Service.LeakSensor, 'alarm', alarmName);
+      alarm.setCharacteristic(Characteristic.Name, alarmName);
     } else {
       for (const [type, subtype] of [[Service.ContactSensor, 'shut'], [Service.LeakSensor, 'alarm']]) {
         const old = accessory.getServiceById(type, subtype);
@@ -194,8 +202,8 @@ class ShellyNeoValvePlatform {
     let holiday = holidayEnabled && accessory.context.holiday === true;
     let holidaySwitch = null;
     if (holidayEnabled) {
-      holidaySwitch = sub(Service.Switch, 'holiday', `${name} holiday mode`);
-      holidaySwitch.setCharacteristic(Characteristic.Name, `${name} holiday mode`);
+      holidaySwitch = sub(Service.Switch, 'holiday', holidayName);
+      holidaySwitch.setCharacteristic(Characteristic.Name, holidayName);
       holidaySwitch.getCharacteristic(Characteristic.On).onGet(() => holiday).onSet((v) => {
         holiday = v === true;
         accessory.context.holiday = holiday;
@@ -211,8 +219,8 @@ class ShellyNeoValvePlatform {
     const longRunRules = holidayEnabled || alertMinutes > 0 || alertLitres > 0 || shutOffMinutes > 0 || shutOffLitres > 0;
     let longRun = null;
     if (longRunRules) {
-      longRun = sub(Service.LeakSensor, 'longrun', `${name} running too long`);
-      longRun.setCharacteristic(Characteristic.Name, `${name} running too long`);
+      longRun = sub(Service.LeakSensor, 'longrun', suspectedName);
+      longRun.setCharacteristic(Characteristic.Name, suspectedName);
     } else {
       const old = accessory.getServiceById(Service.LeakSensor, 'longrun');
       if (old) accessory.removeService(old);
@@ -384,6 +392,23 @@ class ShellyNeoValvePlatform {
           setTimeout(poll, 1500);
         });
     }
+
+    // Read the valve's own alarm limits, log them, and change only the ones filled in the settings (see limits.js).
+    const syncLimits = async () => {
+      try {
+        const current = await rpc('/rpc/Service.GetConfig?id=0');
+        this.log.info('%s: the valve\'s alarm limits are %s', name, describeLimits(current));
+        const { changes, notes } = planLimits(this.config, current);
+        for (const n of notes) this.log.warn('%s: %s', name, n);
+        if (Object.keys(changes).length) {
+          await rpc('/rpc/Service.SetConfig', { id: 0, config: changes });
+          this.log.info('%s: set the valve\'s alarm limits: %s', name, JSON.stringify(changes));
+        }
+      } catch (e) {
+        this.log.warn('%s: could not read or set the valve\'s alarm limits: %s', name, e.message || e);
+      }
+    };
+    syncLimits();
 
     poll();
     this.timers.push(setInterval(poll, Math.max(5, this.config.pollSeconds || 15) * 1000));

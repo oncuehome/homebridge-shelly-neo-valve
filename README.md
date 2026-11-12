@@ -84,3 +84,9 @@ Two files per valve in `snapshotDir`: `<host>.json` (below, written every `snaps
 - The valve's own alarm limits (temperature, pressure, flow) are set in the Shelly app, not here. The valve does not say why it closed, so the Alarm sensor is inferred.
 - Opening or closing the valve changes the water supply to the home.
 - Tested only against firmware 2.0.1 of the `S3XT-0S` model.
+
+## Tile names and the valve's alarm limits (0.5.3)
+
+**Names.** The five tiles in Apple Home are called Water Valve Switch, Water Valve Status, Water Leak Alarm, Water Holiday Mode and Water Suspected Leak Alarm. Each name can be changed in the settings (`switchName`, `statusName`, `alarmName`, `holidayName`, `suspectedLeakName`); empty uses the default.
+
+**Alarm limits.** The valve keeps its own minimum and maximum for water temperature, pressure and flow, and closes when a reading goes outside one. At every start the plugin reads them and writes them to the Homebridge log. It changes a limit **only** when you fill in the matching settings (`limitTempMin`/`limitTempMax` in °C, `limitPressureMinBar`/`limitPressureMaxBar` in bar, `limitFlowMin`/`limitFlowMax` in L/min). With one of a pair filled in, the other keeps the valve's current value. A pair whose minimum is not below its maximum, or that is far outside what makes sense, is refused and logged. Leave them empty and the plugin never writes to the valve. Filled-in limits are put back at the next restart if someone changed them in the Shelly app.
