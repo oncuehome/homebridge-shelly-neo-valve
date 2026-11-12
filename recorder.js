@@ -40,6 +40,7 @@ class Recorder {
     this.maxRows = maxRows;
     this.now = now;
     this.latest = null;        // last good reading { at, ... }
+    this.rules = null;         // the plugin's own rules (unexpected flow checks), as configured, beside the readings
     this.settings = null;      // the valve's own settings when last read (limits, units, ...), kept beside the readings
     this.peakLpm = 0;          // highest flow seen since the last snapshot
     this.history = [];
@@ -53,6 +54,7 @@ class Recorder {
       if (Array.isArray(d.history)) this.history = d.history.slice(-this.maxRows);
       if (d.latest) this.latest = d.latest;
       if (d.valve_settings) this.settings = d.valve_settings;
+      if (d.plugin_rules) this.rules = d.plugin_rules;
       const daysOk = d.days && typeof d.days === 'object' && Object.values(d.days).every((v) => v && typeof v === 'object');
       if (daysOk) this.days = d.days;
       else this.rebuildDays();
@@ -100,6 +102,12 @@ class Recorder {
     this.saveNow();
   }
 
+  // The plugin's own rules as configured, written out with the readings so staff and the app can say what is being watched.
+  setRules(rules) {
+    this.rules = rules;
+    this.saveNow();
+  }
+
   // The valve's settings, read at start and every few hours. Written out with the next .now or snapshot save.
   setSettings(settings) {
     this.settings = settings;
@@ -112,7 +120,7 @@ class Recorder {
     const dir = path.dirname(this.nowFile);
     fs.mkdirSync(dir, { recursive: true, mode: 0o755 });
     const tmp = `${this.nowFile}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify({ schema: 1, updated_at: this.latest.at, latest: this.latest, valve_settings: this.settings }), { mode: 0o644 });
+    fs.writeFileSync(tmp, JSON.stringify({ schema: 1, updated_at: this.latest.at, latest: this.latest, valve_settings: this.settings, plugin_rules: this.rules }), { mode: 0o644 });
     fs.renameSync(tmp, this.nowFile);
   }
 
@@ -150,6 +158,7 @@ class Recorder {
       updated_at: updatedAt,
       latest: this.latest,
       valve_settings: this.settings,
+      plugin_rules: this.rules,
       days: this.days,
       history: this.history,
     };

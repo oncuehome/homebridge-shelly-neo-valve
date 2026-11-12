@@ -264,6 +264,17 @@ class ShellyNeoValvePlatform {
         maxRows: Math.ceil((days * 24 * 60) / everyMin),
       });
       snapshotEveryMs = everyMin * 60 * 1000;
+      // What this plugin is watching for, as configured. Numbers and times only; 0 means off.
+      recorder.setRules({
+        alert_after_minutes: alertMinutes, alert_after_litres: alertLitres,
+        shut_off_after_minutes: shutOffMinutes, shut_off_after_litres: shutOffLitres,
+        holiday: {
+          enabled: holidayEnabled, alert_minutes: holidayAlertMinutes, shut_off_minutes: holidayShutOffMinutes,
+          allowance_litres_24h: holidayAllowance.litres,
+          ignore_from: typeof quietFrom === 'string' && quietFrom.trim() ? quietFrom.trim().slice(0, 5) : null,
+          ignore_to: typeof quietTo === 'string' && quietTo.trim() ? quietTo.trim().slice(0, 5) : null,
+        },
+      });
     }
     const setFault = (fault) => all.forEach((s) =>
       s.updateCharacteristic(Characteristic.StatusFault, fault
