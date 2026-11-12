@@ -189,9 +189,10 @@ console.log('longrun ok');
   assert2.deepStrictEqual(planLimits({}, cur), { changes: {}, notes: [] });
   assert2.deepStrictEqual(planLimits({ limitPressureMinBar: 1.5 }, cur).changes, { alarm_pressure_range: [150, 550] });
   assert2.deepStrictEqual(planLimits({ limitTempMin: 3, limitTempMax: 50 }, cur).changes, {});
+  assert2.deepStrictEqual(planLimits({ limitFlowMin: 0, limitFlowMax: 100 }, cur).changes, { alarm_flow_rate_range: [0, 0.1] });
   assert2.ok(planLimits({ limitFlowMin: 100, limitFlowMax: 90 }, cur).notes[0].includes('must be below'));
   assert2.ok(planLimits({ limitPressureMaxBar: 50 }, cur).notes[0].includes('outside'));
   assert2.ok(planLimits({ limitTempMin: 5 }, {}).notes[0].includes('could not be read'));
-  assert2.strictEqual(describeLimits(cur), 'temperature 3 to 50 C, pressure 1 to 5.5 bar, flow 75 to 110 L/min');
+  assert2.strictEqual(describeLimits(cur), 'temperature 3 to 50 C, pressure 1 to 5.5 bar, flow 75000 to 110000 L/min');
   console.log('ok limits');
 }
