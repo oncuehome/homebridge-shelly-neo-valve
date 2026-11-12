@@ -128,6 +128,10 @@ class ShellyNeoValvePlatform {
       valve.setCharacteristic(Characteristic.ValveType, Characteristic.ValveType.WATER_FAUCET);
     }
 
+    // One accessory carries the control and the sensors. Home draws ONE tile per accessory from its primary service,
+    // so mark the control as primary; otherwise Home may pick the leak sensor and show a drop where the switch should be.
+    valve.setPrimaryService(true);
+
     // By default the readings also appear in Home (HomeKit has no pressure or flow sensor, so those two are
     // light sensors). Set "homeSensors": false to keep only the valve in Home and read the rest elsewhere.
     const homeSensors = this.config.homeSensors !== false;
