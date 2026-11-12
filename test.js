@@ -199,3 +199,26 @@ console.log('longrun ok');
   assert2.strictEqual(summariseSettings(null, null).limits.flow, null);
   console.log('ok settings');
 }
+
+// --- unexpected flow: sprinkler window and 24-hour allowance ---
+{
+  const { inWindow, Allowance } = require('./longrun.js');
+  const a2 = require('assert');
+  const at = (h, m) => new Date(2026, 10, 12, h, m);
+  a2.ok(inWindow(at(5, 30), '05:00', '07:00') && !inWindow(at(7, 0), '05:00', '07:00') && !inWindow(at(4, 59), '05:00', '07:00'));
+  a2.ok(inWindow(at(23, 0), '22:00', '02:00') && inWindow(at(1, 0), '22:00', '02:00') && !inWindow(at(12, 0), '22:00', '02:00'));
+  a2.ok(!inWindow(at(6, 0), '', '07:00') && !inWindow(at(6, 0), 'x', 'y') && !inWindow(at(6, 0), '06:00', '06:00'));
+  const al = new Allowance({ litres: 10 });
+  const H = 3600000;
+  let r = al.update(0, 100, true);                    // first reading only sets the counter
+  a2.deepStrictEqual(r, { litres: 0, over: false });
+  r = al.update(1 * H, 103, true); a2.deepStrictEqual(r, { litres: 3, over: false });
+  r = al.update(2 * H, 109, false); a2.strictEqual(r.litres, 3, 'water used while not counting is skipped');
+  r = al.update(3 * H, 116, true); a2.deepStrictEqual(r, { litres: 10, over: true });
+  r = al.update(30 * H, 116, true); a2.strictEqual(r.over, false, 'old hours drop out after 24 hours');
+  const al2 = new Allowance({ litres: 0 }); al2.update(0, 1, true);
+  a2.strictEqual(al2.update(H, 500, true).over, false, 'allowance 0 is off');
+  const al3 = new Allowance({ litres: 5 }); al3.update(0, 50, true); al3.update(H, 52, true);
+  a2.strictEqual(al3.update(2 * H, 3, true).litres, 5, 'a counter reset counts from zero');
+  console.log('ok allowance and window');
+}

@@ -62,4 +62,50 @@ class RunTracker {
   }
 }
 
-module.exports = { RunTracker, MIN_FLOW_LPM };
+// A daily window (the Pi's own clock) when holiday rules are ignored, for sprinklers and the like. "HH:MM" strings; the window
+// may cross midnight (22:00 to 02:00). Empty or invalid means no window.
+function minutesOfDay(text) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(typeof text === 'string' ? text.trim() : '');
+  if (!m) return null;
+  const h = Number(m[1]), mi = Number(m[2]);
+  return h < 24 && mi < 60 ? h * 60 + mi : null;
+}
+function inWindow(date, from, to) {
+  const a = minutesOfDay(from), b = minutesOfDay(to);
+  if (a === null || b === null || a === b) return false;
+  const now = date.getHours() * 60 + date.getMinutes();
+  return a < b ? now >= a && now < b : now >= a || now < b;
+}
+
+// Slow leaks: litres used over the last 24 hours while the rule is active (holiday mode on, outside any sprinkler window), from the
+// valve's own water counter, so even a drip that never makes one long run adds up. Over the allowance trips the alert; it clears
+// by itself once the used litres drop back under it. 0 turns it off. Counted in hourly buckets so memory is tiny.
+class Allowance {
+  constructor({ litres = 0, hours = 24 } = {}) {
+    this.litres = litres;
+    this.hours = hours;
+    this.buckets = new Map();   // hour (ms since epoch / 3600000, floored) -> litres counted in it
+    this.lastTotal = null;
+  }
+
+  reset() { this.buckets.clear(); this.lastTotal = null; }
+
+  // nowMs: time of this reading; totalL: the valve's counter in litres or null; counting: whether this stretch counts.
+  update(nowMs, totalL, counting) {
+    if (typeof totalL === 'number') {
+      // A counter that went down was reset: count from zero. Water used while not counting is skipped, not saved up.
+      if (counting && this.lastTotal !== null) {
+        const delta = totalL >= this.lastTotal ? totalL - this.lastTotal : totalL;
+        const hour = Math.floor(nowMs / 3600000);
+        this.buckets.set(hour, (this.buckets.get(hour) || 0) + delta);
+      }
+      this.lastTotal = totalL;
+    }
+    const oldest = Math.floor(nowMs / 3600000) - this.hours + 1;
+    for (const h of [...this.buckets.keys()]) if (h < oldest) this.buckets.delete(h);
+    const used = [...this.buckets.values()].reduce((a, b) => a + b, 0);
+    return { litres: Math.round(used * 10) / 10, over: this.litres > 0 && used >= this.litres };
+  }
+}
+
+module.exports = { RunTracker, MIN_FLOW_LPM, inWindow, Allowance };

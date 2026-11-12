@@ -3,7 +3,7 @@
 const crypto = require('crypto');
 const path = require('path');
 const { Recorder, gaugeBar, DEFAULT_ATMOSPHERIC_BAR } = require('./recorder.js');
-const { RunTracker } = require('./longrun.js');
+const { RunTracker, Allowance, inWindow } = require('./longrun.js');
 const { summariseSettings, describeSettings, settingsKey } = require('./limits.js');
 
 const PLUGIN_NAME = 'homebridge-shelly-neo-valve';
@@ -125,9 +125,9 @@ class ShellyNeoValvePlatform {
     const label = (key, dflt) => (typeof this.config[key] === 'string' && this.config[key].trim() ? this.config[key].trim() : dflt);
     const switchName = label('switchName', 'Water Valve Switch');
     const statusName = label('statusName', 'Water Valve Status');
-    const alarmName = label('alarmName', 'Water Leak Alarm');
+    const alarmName = label('alarmName', 'Water Critical Fault Sensor');
     const holidayName = label('holidayName', 'Water Holiday Mode');
-    const suspectedName = label('suspectedLeakName', 'Water Suspected Leak Alarm');
+    const suspectedName = label('suspectedLeakName', 'Water Unexpected Flow Sensor');
     const oldValve = accessory.getServiceById(Service.Valve, 'valve');
     const oldSwitch = accessory.getServiceById(Service.Switch, 'switch');
     let valve;
@@ -199,6 +199,10 @@ class ShellyNeoValvePlatform {
     const holidayEnabled = this.config.holidayMode !== false;
     const holidayAlertMinutes = num(this.config.holidayAlertMinutes, 3);
     const holidayShutOffMinutes = num(this.config.holidayShutOffMinutes, 0);
+    // Slow leaks while away: litres over the last 24 hours in holiday mode, from the valve's counter. And a daily window when holiday
+    // rules are ignored (sprinklers). Both use the Pi's own clock.
+    const holidayAllowance = new Allowance({ litres: num(this.config.holidayAllowanceLitres, 0) });
+    const quietFrom = this.config.holidayIgnoreFrom, quietTo = this.config.holidayIgnoreTo;
     let holiday = holidayEnabled && accessory.context.holiday === true;
     let holidaySwitch = null;
     if (holidayEnabled) {
@@ -208,6 +212,7 @@ class ShellyNeoValvePlatform {
         holiday = v === true;
         accessory.context.holiday = holiday;
         holidayTracker.reset();
+        holidayAllowance.reset();
         try { this.api.updatePlatformAccessories([accessory]); } catch (e) { /* the cache is saved on shutdown anyway */ }
         this.log.info('%s: holiday mode %s', name, holiday ? 'on' : 'off');
       });
@@ -216,7 +221,7 @@ class ShellyNeoValvePlatform {
       const old = accessory.getServiceById(Service.Switch, 'holiday');
       if (old) accessory.removeService(old);
     }
-    const longRunRules = holidayEnabled || alertMinutes > 0 || alertLitres > 0 || shutOffMinutes > 0 || shutOffLitres > 0;
+    const longRunRules = holidayEnabled || holidayAllowance.litres > 0 || alertMinutes > 0 || alertLitres > 0 || shutOffMinutes > 0 || shutOffLitres > 0;
     let longRun = null;
     if (longRunRules) {
       longRun = sub(Service.LeakSensor, 'longrun', suspectedName);
@@ -324,18 +329,22 @@ class ShellyNeoValvePlatform {
         reachable = true;
         const run = tracker.update(Date.now(), reading.flowLpm, reading.consumptionL);
         // While holiday mode is on, its (shorter) limits count as well as the normal ones.
-        const away = holiday ? holidayTracker.update(Date.now(), reading.flowLpm, reading.consumptionL) : null;
-        if (!holiday) holidayTracker.reset();
+        // Outside any sprinkler window only: inside it the holiday rules look away (the normal limits above still apply).
+        const holidayActive = holiday && !inWindow(new Date(), quietFrom, quietTo);
+        const away = holidayActive ? holidayTracker.update(Date.now(), reading.flowLpm, reading.consumptionL) : null;
+        if (!holidayActive) holidayTracker.reset();
         if (away) { run.alert = run.alert || away.alert; run.shutOff = run.shutOff || away.shutOff; }
+        const slow = holidayAllowance.update(Date.now(), reading.consumptionL, holidayActive);
         if (longRunRules) {
           if (reading.open && shutOffLatched && !run.active) shutOffLatched = false;   // opened again: the alert can clear
           const was = longRunOn;
-          longRunOn = run.alert || shutOffLatched;
+          longRunOn = run.alert || shutOffLatched || slow.over;
           if (longRun) {
             longRun.updateCharacteristic(Characteristic.LeakDetected, longRunOn
               ? Characteristic.LeakDetected.LEAK_DETECTED : Characteristic.LeakDetected.LEAK_NOT_DETECTED);
           }
-          if (longRunOn && !was) this.log.warn('%s: water has been running for %s min (%s L)%s', name, run.minutes, run.litres, holiday ? ' while holiday mode is on' : '');
+          if (slow.over && !was && !run.alert) this.log.warn('%s: %s L used in the last 24 hours while holiday mode is on (allowance %s L)', name, slow.litres, holidayAllowance.litres);
+          if (longRunOn && !was && run.alert) this.log.warn('%s: water has been running for %s min (%s L)%s', name, run.minutes, run.litres, holiday ? ' while holiday mode is on' : '');
           if (run.shutOff && reading.open && !shutOffLatched) {
             shutOffLatched = true;
             longRunOn = true;

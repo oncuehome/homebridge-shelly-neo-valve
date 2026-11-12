@@ -98,6 +98,26 @@
         "default": 0,
         "minimum": 0
       },
+      "holidayAllowanceLitres": {
+        "title": "In holiday mode, alert when more than this many litres are used in 24 hours",
+        "description": "Catches slow leaks that never make one long run, such as a dripping tap or a cistern refilling. Counted from the valve's own water counter while holiday mode is on. 0 (the default) turns it off. Choose a little above what an empty home really uses (a fridge ice maker, say).",
+        "type": "number",
+        "default": 0,
+        "minimum": 0
+      },
+      "holidayIgnoreFrom": {
+        "title": "In holiday mode, ignore water from (time)",
+        "description": "A daily window when holiday mode does not count water, for sprinklers or irrigation. 24-hour time on the Pi's clock, for example 05:00. The normal \"running too long\" limits still apply. Leave both empty for no window.",
+        "type": "string",
+        "placeholder": "05:00",
+        "pattern": "^([01]?\\d|2[0-3]):[0-5]\\d$"
+      },
+      "holidayIgnoreTo": {
+        "title": "In holiday mode, ignore water until (time)",
+        "type": "string",
+        "placeholder": "07:00",
+        "pattern": "^([01]?\\d|2[0-3]):[0-5]\\d$"
+      },
       "atmosphericBar": {
         "title": "Atmospheric pressure (bar)",
         "description": "The valve shows absolute pressure while no water flows. This is subtracted to give the real water pressure. 1.013 at sea level; lower at altitude.",
@@ -143,10 +163,10 @@
         "description": "Empty uses \"Water Valve Status\"."
       },
       "alarmName": {
-        "title": "Name of the valve alarm sensor",
+        "title": "Name of the critical fault sensor (the valve's own alarms)",
         "type": "string",
-        "placeholder": "Water Leak Alarm",
-        "description": "Empty uses \"Water Leak Alarm\"."
+        "placeholder": "Water Critical Fault Sensor",
+        "description": "Empty uses \"Water Critical Fault Sensor\"."
       },
       "holidayName": {
         "title": "Name of the Holiday mode switch",
@@ -155,10 +175,10 @@
         "description": "Empty uses \"Water Holiday Mode\"."
       },
       "suspectedLeakName": {
-        "title": "Name of the running-too-long sensor",
+        "title": "Name of the unexpected flow sensor (the plugin's own rules)",
         "type": "string",
-        "placeholder": "Water Suspected Leak Alarm",
-        "description": "Empty uses \"Water Suspected Leak Alarm\"."
+        "placeholder": "Water Unexpected Flow Sensor",
+        "description": "Empty uses \"Water Unexpected Flow Sensor\"."
       },
       "devices": {
         "title": "Valves",

@@ -87,6 +87,11 @@ Two files per valve in `snapshotDir`: `<host>.json` (below, written every `snaps
 
 ## Tile names and the valve's alarm limits (0.5.3)
 
-**Names.** The five tiles in Apple Home are called Water Valve Switch, Water Valve Status, Water Leak Alarm, Water Holiday Mode and Water Suspected Leak Alarm. Each name can be changed in the settings (`switchName`, `statusName`, `alarmName`, `holidayName`, `suspectedLeakName`); empty uses the default.
+**Names.** The five tiles in Apple Home are called Water Valve Switch, Water Valve Status, Water Critical Fault Sensor, Water Holiday Mode and Water Unexpected Flow Sensor. Each name can be changed in the settings (`switchName`, `statusName`, `alarmName`, `holidayName`, `suspectedLeakName`); empty uses the default.
 
 **The valve's own settings.** The alarm limits (temperature, pressure, flow), the display units, what the valve does when power returns and its time zone are set on the valve, in the Shelly app or web page. The plugin never changes them. At every start, and every six hours, it reads them, writes them to the Homebridge log, and keeps a copy (`valve_settings`) beside the readings in the snapshot file, so a reading can be understood against the settings the valve had. A change made on the valve is logged as a warning. Pressure is in bar and flow in L/min in the copy; the valve itself stores flow in a unit 1000 times smaller and shows it as L/min x1000 on its page.
+
+## Two kinds of alarm (0.5.5)
+
+- **Critical fault sensor:** the valve's own alarms (temperature, pressure, flow limits), set on the valve. When one trips the valve closes by itself, and this sensor shows the valve shut without being told to. The plugin cannot tell which limit tripped, nor tell it apart from a press of the button or the Shelly app.
+- **Unexpected flow sensor:** the plugin's own rules, set in the Homebridge settings: water running for too long (forgotten tap or bath), and in Holiday mode water running for a few minutes, or more than an allowance of litres in 24 hours (`holidayAllowanceLitres`, counted from the valve's water counter, so a slow leak that never makes one long run still adds up). `holidayIgnoreFrom` and `holidayIgnoreTo` (HH:MM, the Pi's clock, may cross midnight) are a daily window when holiday rules look away, for sprinklers; the normal running-too-long limit still applies in the window. The allowance clears by itself when the litres in the last 24 hours drop back under it. Both are off until set.

@@ -1,7 +1,7 @@
 {
   "displayName": "Homebridge Shelly Neo Water Valve",
   "name": "homebridge-shelly-neo-valve",
-  "version": "0.5.4",
+  "version": "0.5.5",
   "description": "HomeKit valve for the Shelly Neo Smart Water Valve (Gen3, XT1) over its local RPC interface, with optional temperature, pressure and flow tiles and a snapshot file of the readings every few minutes.",
   "license": "Apache-2.0",
   "author": "On Cue Home",
