@@ -10,6 +10,7 @@ Homebridge plugin for the **Shelly Neo Smart Water Valve** (Gen3, "Powered by Sh
 | Closed | Contact Sensor | Closed = water off. Home can notify on a contact sensor but not on a valve. (`valveSensors`) |
 | Alarm | Leak Sensor | Trips when the valve shuts without Home telling it to (a valve alarm, the Shelly app or the button). Clears when it opens. (`valveSensors`) |
 | Running too long | Leak Sensor | Trips when water has flowed without stopping for `alertAfterMinutes` (default 30) or `alertAfterLitres`. Stays on after a shut-off until the valve is opened again. |
+| Holiday mode | Switch | While on, water running for `holidayAlertMinutes` (default 3) trips the Running too long sensor, and for `holidayShutOffMinutes` (default 0 = never) closes the valve. Remembered across restarts. |
 | Water temperature | Temperature Sensor | Real °C. (`homeSensors`) |
 | Water pressure in bar | Light Sensor | HomeKit has no pressure sensor. The number is the real water pressure in bar, labelled "lux" by Home. (`homeSensors`) |
 | Water flow in L per min | Light Sensor | The real L/min value, labelled "lux". (`homeSensors`) |
@@ -30,6 +31,9 @@ All sit in one accessory per valve. Tiles show a "No Response" fault if the valv
   "valveSensors": true,
   "alertAfterMinutes": 30,
   "shutOffAfterMinutes": 0,
+  "holidayMode": true,
+  "holidayAlertMinutes": 3,
+  "holidayShutOffMinutes": 0,
   "atmosphericBar": 1.013,
   "snapshots": true,
   "snapshotMinutes": 10,
@@ -51,6 +55,9 @@ Reserve the valve's address in the router.
 | `alertAfterLitres` | 0 | Same, by litres in one run. 0 = off |
 | `shutOffAfterMinutes` | 0 | Close the valve after this many minutes of unbroken flow. 0 = never |
 | `shutOffAfterLitres` | 0 | Same, by litres in one run. 0 = never |
+| `holidayMode` | true | Adds the Holiday mode switch. False removes it |
+| `holidayAlertMinutes` | 3 | In holiday mode, trip the Running too long sensor after this many minutes of unbroken flow |
+| `holidayShutOffMinutes` | 0 | In holiday mode, close the valve after this many minutes. 0 = never; 10 suits an empty home |
 | `atmosphericBar` | 1.013 | Subtracted from the reading when nothing flows |
 | `snapshots` | true | Keep a JSON file of readings |
 | `snapshotMinutes` | 10 | Minutes between saved rows (1 to 60) |
@@ -60,6 +67,8 @@ Reserve the valve's address in the router.
 ## Running too long
 
 A run starts when the flow is above 0.05 L/min and ends once it has been zero for about 90 seconds (three polls), so a blip between polls does not split it. Minutes and litres are counted from the start of the run; litres come from the valve's own counter. A limit of 0 is off. A shut-off closes the valve with the same command Home uses, and the alert stays on until the valve is opened again. A bath or a hose left running on purpose counts as a long run, so choose limits that suit the home, and leave the shut-off off unless you want it.
+
+Holiday mode uses the same sensor and the same run counting, with its own (shorter) limits, and the shut-off latches the same way. The snapshot's `latest` carries `holiday: true` while it is on, so the hub status can show it.
 
 ## Snapshot files
 

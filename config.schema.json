@@ -69,6 +69,25 @@
         "default": 0,
         "minimum": 0
       },
+      "holidayMode": {
+        "title": "Add a Holiday mode switch to Apple Home",
+        "description": "While it is on, water running for a few minutes trips the 'running too long' sensor, because nobody should be using water. Home remembers the switch across restarts. Turn it on when the home is empty.",
+        "type": "boolean",
+        "default": true
+      },
+      "holidayAlertMinutes": {
+        "title": "In holiday mode, alert after water has run for (minutes)",
+        "type": "number",
+        "default": 3,
+        "minimum": 1
+      },
+      "holidayShutOffMinutes": {
+        "title": "In holiday mode, shut the water off after (minutes)",
+        "description": "0 (the default) never shuts it off. Ten is a sensible choice for an empty home: it closes the valve if water runs for ten minutes.",
+        "type": "number",
+        "default": 0,
+        "minimum": 0
+      },
       "atmosphericBar": {
         "title": "Atmospheric pressure (bar)",
         "description": "The valve shows absolute pressure while no water flows. This is subtracted to give the real water pressure. 1.013 at sea level; lower at altitude.",

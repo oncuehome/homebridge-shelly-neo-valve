@@ -125,6 +125,34 @@ const logs = [];
   valve.open = true;                                       // someone opens it again
   await tick(1);
   assert.strictEqual(leak('longrun'), 0, 'clears once the valve is open again');
+  // holiday mode: much shorter limits while it is on, remembered, and shown in the "now" file
+  const hol = svc('Switch', 'holiday');
+  assert.ok(hol, 'a holiday switch');
+  assert.strictEqual(label('Switch', 'holiday'), 'Water Valve holiday mode');
+  assert.strictEqual(hol.getCharacteristic('On').value, false);
+  valve.flow = 0;
+  for (let i = 0; i < 3; i++) await tick(2);                // any earlier run ends
+  assert.strictEqual(leak('longrun'), 0);
+  hol.getCharacteristic('On').set(true);
+  assert.strictEqual(acc.context.holiday, true, 'remembered in the accessory cache');
+  valve.flow = 8;
+  valve.total += 16; await tick(1);
+  valve.total += 16; await tick(1);
+  assert.strictEqual(leak('longrun'), 0, 'two minutes: not yet');
+  valve.total += 16; await tick(1);
+  valve.total += 16; await tick(2);
+  assert.strictEqual(leak('longrun'), 1, 'holiday alert after 3 minutes, long before the normal 30');
+  assert.strictEqual(valve.open, true, 'no holiday shut-off configured');
+  const docH = JSON.parse(fs.readFileSync(path.join(dir, `127.0.0.1-${port}.now`), 'utf8'));
+  assert.strictEqual(docH.latest.holiday, true);
+  hol.getCharacteristic('On').set(false);
+  valve.flow = 0;
+  for (let i = 0; i < 3; i++) await tick(2);
+  assert.strictEqual(leak('longrun'), 0, 'clears when the water stops');
+  // normal use with holiday off does not alert at 5 minutes
+  valve.flow = 8;
+  for (let i = 0; i < 2; i++) { valve.total += 40; await tick(2.5); }
+  assert.strictEqual(leak('longrun'), 0, 'five minutes of normal use is fine with holiday mode off');
   console.log('platform ok');
   Date.now = realNow;
   server.close(); fs.rmSync(dir, { recursive: true });

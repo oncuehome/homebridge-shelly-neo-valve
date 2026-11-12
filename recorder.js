@@ -81,7 +81,7 @@ class Recorder {
   }
 
   // Called on every poll of the valve with the parsed reading.
-  observe(r, run = null) {
+  observe(r, run = null, holiday = false) {
     const flow = r.flowLpm;
     this.peakLpm = Math.max(this.peakLpm, flow);
     this.latest = {
@@ -93,6 +93,7 @@ class Recorder {
       temperature_c: round(r.temperatureC, 1),
       consumption_l: round(r.consumptionL, 3),
       run: run ? { minutes: run.minutes, litres: run.litres, alert: run.alert === true } : null,
+      holiday: holiday === true,
     };
     this.saveNow();
   }

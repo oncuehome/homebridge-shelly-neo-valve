@@ -186,7 +186,29 @@ class ShellyNeoValvePlatform {
     const alertLitres = num(this.config.alertAfterLitres, 0);
     const shutOffMinutes = num(this.config.shutOffAfterMinutes, 0);
     const shutOffLitres = num(this.config.shutOffAfterLitres, 0);
-    const longRunRules = alertMinutes > 0 || alertLitres > 0 || shutOffMinutes > 0 || shutOffLitres > 0;
+    // Holiday mode: a switch in Home. While it is on, nobody should be using water, so water running for a few minutes (the
+    // alert) or longer (the optional shut-off) trips the same "running too long" sensor. It is remembered across restarts.
+    const holidayEnabled = this.config.holidayMode !== false;
+    const holidayAlertMinutes = num(this.config.holidayAlertMinutes, 3);
+    const holidayShutOffMinutes = num(this.config.holidayShutOffMinutes, 0);
+    let holiday = holidayEnabled && accessory.context.holiday === true;
+    let holidaySwitch = null;
+    if (holidayEnabled) {
+      holidaySwitch = sub(Service.Switch, 'holiday', `${name} holiday mode`);
+      holidaySwitch.setCharacteristic(Characteristic.Name, `${name} holiday mode`);
+      holidaySwitch.getCharacteristic(Characteristic.On).onGet(() => holiday).onSet((v) => {
+        holiday = v === true;
+        accessory.context.holiday = holiday;
+        holidayTracker.reset();
+        try { this.api.updatePlatformAccessories([accessory]); } catch (e) { /* the cache is saved on shutdown anyway */ }
+        this.log.info('%s: holiday mode %s', name, holiday ? 'on' : 'off');
+      });
+      holidaySwitch.updateCharacteristic(Characteristic.On, holiday);
+    } else {
+      const old = accessory.getServiceById(Service.Switch, 'holiday');
+      if (old) accessory.removeService(old);
+    }
+    const longRunRules = holidayEnabled || alertMinutes > 0 || alertLitres > 0 || shutOffMinutes > 0 || shutOffLitres > 0;
     let longRun = null;
     if (longRunRules) {
       longRun = sub(Service.LeakSensor, 'longrun', `${name} running too long`);
@@ -199,13 +221,17 @@ class ShellyNeoValvePlatform {
       alertMinutes, alertLitres, shutOffMinutes, shutOffLitres,
       graceMs: Math.max(90, 3 * Math.max(5, this.config.pollSeconds || 15)) * 1000,
     });
+    const holidayTracker = new RunTracker({
+      alertMinutes: holidayAlertMinutes, shutOffMinutes: holidayShutOffMinutes,
+      graceMs: Math.max(90, 3 * Math.max(5, this.config.pollSeconds || 15)) * 1000,
+    });
     let longRunOn = false;
     let shutOffLatched = false;
 
     let lastCommandAt = 0;
     let alarmOn = false;
 
-    const all = [valve, temp, pressure, flow, contact, alarm, longRun].filter(Boolean);
+    const all = [valve, temp, pressure, flow, contact, alarm, longRun, holidaySwitch].filter(Boolean);
 
     // Snapshots: one reading every few minutes into a small JSON file (see recorder.js).
     const atmosphericBar = typeof this.config.atmosphericBar === 'number' ? this.config.atmosphericBar : DEFAULT_ATMOSPHERIC_BAR;
@@ -289,6 +315,10 @@ class ShellyNeoValvePlatform {
         apply(reading);
         reachable = true;
         const run = tracker.update(Date.now(), reading.flowLpm, reading.consumptionL);
+        // While holiday mode is on, its (shorter) limits count as well as the normal ones.
+        const away = holiday ? holidayTracker.update(Date.now(), reading.flowLpm, reading.consumptionL) : null;
+        if (!holiday) holidayTracker.reset();
+        if (away) { run.alert = run.alert || away.alert; run.shutOff = run.shutOff || away.shutOff; }
         if (longRunRules) {
           if (reading.open && shutOffLatched && !run.active) shutOffLatched = false;   // opened again: the alert can clear
           const was = longRunOn;
@@ -297,7 +327,7 @@ class ShellyNeoValvePlatform {
             longRun.updateCharacteristic(Characteristic.LeakDetected, longRunOn
               ? Characteristic.LeakDetected.LEAK_DETECTED : Characteristic.LeakDetected.LEAK_NOT_DETECTED);
           }
-          if (longRunOn && !was) this.log.warn('%s: water has been running for %s min (%s L)', name, run.minutes, run.litres);
+          if (longRunOn && !was) this.log.warn('%s: water has been running for %s min (%s L)%s', name, run.minutes, run.litres, holiday ? ' while holiday mode is on' : '');
           if (run.shutOff && reading.open && !shutOffLatched) {
             shutOffLatched = true;
             longRunOn = true;
@@ -306,7 +336,7 @@ class ShellyNeoValvePlatform {
           }
         }
         if (recorder) {
-          recorder.observe(reading, run.active || longRunOn ? { minutes: run.minutes, litres: run.litres, alert: longRunOn } : null);
+          recorder.observe(reading, run.active || longRunOn ? { minutes: run.minutes, litres: run.litres, alert: longRunOn } : null, holiday);
           // Record the first good reading at once, so there is a snapshot as soon as the plugin starts.
           if (!firstSnapshotDone) { firstSnapshotDone = true; recorder.snapshot(true); }
         }
