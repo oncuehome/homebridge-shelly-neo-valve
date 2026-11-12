@@ -4,7 +4,7 @@ const crypto = require('crypto');
 const path = require('path');
 const { Recorder, gaugeBar, DEFAULT_ATMOSPHERIC_BAR } = require('./recorder.js');
 const { RunTracker } = require('./longrun.js');
-const { planLimits, describeLimits } = require('./limits.js');
+const { summariseSettings, describeSettings, settingsKey } = require('./limits.js');
 
 const PLUGIN_NAME = 'homebridge-shelly-neo-valve';
 const PLATFORM_NAME = 'ShellyNeoValve';
@@ -393,22 +393,26 @@ class ShellyNeoValvePlatform {
         });
     }
 
-    // Read the valve's own alarm limits, log them, and change only the ones filled in the settings (see limits.js).
-    const syncLimits = async () => {
+    // The valve's own settings are mastered on the valve. Read them at start and every few hours, log them, keep a copy beside
+    // the readings, and say so when they change. Never written from here.
+    let lastSettingsKey = null;
+    const readSettings = async () => {
       try {
-        const current = await rpc('/rpc/Service.GetConfig?id=0');
-        this.log.info('%s: the valve\'s alarm limits are %s', name, describeLimits(current));
-        const { changes, notes } = planLimits(this.config, current);
-        for (const n of notes) this.log.warn('%s: %s', name, n);
-        if (Object.keys(changes).length) {
-          await rpc('/rpc/Service.SetConfig', { id: 0, config: changes });
-          this.log.info('%s: set the valve\'s alarm limits: %s', name, JSON.stringify(changes));
-        }
+        const service = await rpc('/rpc/Service.GetConfig?id=0');
+        let sys = null;
+        try { sys = await rpc('/rpc/Sys.GetConfig'); } catch (e) { /* the limits are the useful part */ }
+        const settings = summariseSettings(service, sys);
+        const key = settingsKey(settings);
+        if (lastSettingsKey === null) this.log.info('%s: valve settings: %s', name, describeSettings(settings));
+        else if (key !== lastSettingsKey) this.log.warn('%s: the valve\'s settings changed: %s', name, describeSettings(settings));
+        lastSettingsKey = key;
+        if (recorder) recorder.setSettings(settings);
       } catch (e) {
-        this.log.warn('%s: could not read or set the valve\'s alarm limits: %s', name, e.message || e);
+        this.log.warn('%s: could not read the valve\'s settings: %s', name, e.message || e);
       }
     };
-    syncLimits();
+    readSettings();
+    this.timers.push(setInterval(readSettings, 6 * 60 * 60 * 1000));
 
     poll();
     this.timers.push(setInterval(poll, Math.max(5, this.config.pollSeconds || 15) * 1000));

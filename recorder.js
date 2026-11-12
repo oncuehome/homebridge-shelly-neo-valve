@@ -40,6 +40,7 @@ class Recorder {
     this.maxRows = maxRows;
     this.now = now;
     this.latest = null;        // last good reading { at, ... }
+    this.settings = null;      // the valve's own settings when last read (limits, units, ...), kept beside the readings
     this.peakLpm = 0;          // highest flow seen since the last snapshot
     this.history = [];
     this.lastTotalL = null;    // water counter at the previous snapshot
@@ -51,6 +52,7 @@ class Recorder {
       const d = JSON.parse(fs.readFileSync(this.file, 'utf8'));
       if (Array.isArray(d.history)) this.history = d.history.slice(-this.maxRows);
       if (d.latest) this.latest = d.latest;
+      if (d.valve_settings) this.settings = d.valve_settings;
       const daysOk = d.days && typeof d.days === 'object' && Object.values(d.days).every((v) => v && typeof v === 'object');
       if (daysOk) this.days = d.days;
       else this.rebuildDays();
@@ -98,13 +100,19 @@ class Recorder {
     this.saveNow();
   }
 
+  // The valve's settings, read at start and every few hours. Written out with the next .now or snapshot save.
+  setSettings(settings) {
+    this.settings = settings;
+    this.saveNow();
+  }
+
   // The newest reading only, atomically. Cheap enough to do every poll.
   saveNow() {
     if (!this.latest) return;
     const dir = path.dirname(this.nowFile);
     fs.mkdirSync(dir, { recursive: true, mode: 0o755 });
     const tmp = `${this.nowFile}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify({ schema: 1, updated_at: this.latest.at, latest: this.latest }), { mode: 0o644 });
+    fs.writeFileSync(tmp, JSON.stringify({ schema: 1, updated_at: this.latest.at, latest: this.latest, valve_settings: this.settings }), { mode: 0o644 });
     fs.renameSync(tmp, this.nowFile);
   }
 
@@ -141,6 +149,7 @@ class Recorder {
       atmospheric_bar: this.atmosphericBar,
       updated_at: updatedAt,
       latest: this.latest,
+      valve_settings: this.settings,
       days: this.days,
       history: this.history,
     };

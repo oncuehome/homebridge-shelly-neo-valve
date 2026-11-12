@@ -1,48 +1,51 @@
 'use strict';
 
-// The valve keeps its own alarm limits (service:0). Each is a [min, max] pair; outside it the valve takes its alarm action
-// (close). The plugin reads them at every start and logs them. It writes one ONLY when the matching settings are filled in.
-// Units in the valve: temperature C, pressure kPa (absolute), flow m3/min (the Shelly page shows it as L/min, x1000, so a
-// stored 75 is shown as 75000 L/min). In the settings: C, bar and L/min.
+// The valve keeps its own settings (alarm limits, units, what to do when power returns). They are MASTERED ON THE VALVE:
+// this plugin only reads them, logs them and saves a copy beside the readings, so what we show can be read against what the
+// valve was set to at the time. It never writes them.
+// Units in the valve: temperature C, pressure kPa (absolute), flow m3/min (the Shelly page shows x1000 as L/min, so a stored
+// 75 is shown there as 75000 L/min). Here they are given in C, bar and L/min.
 const KPA_PER_BAR = 100;
+const round = (v, p = 3) => Math.round(v * 10 ** p) / 10 ** p;
 
 const LIMITS = [
-  { key: 'alarm_temp_range', label: 'temperature', unit: 'C', min: 'limitTempMin', max: 'limitTempMax', scale: 1, lo: -20, hi: 100 },
-  { key: 'alarm_pressure_range', label: 'pressure', unit: 'bar', min: 'limitPressureMinBar', max: 'limitPressureMaxBar', scale: KPA_PER_BAR, lo: 0, hi: 10 },
-  { key: 'alarm_flow_rate_range', label: 'flow', unit: 'L/min', min: 'limitFlowMin', max: 'limitFlowMax', scale: 0.001, lo: 0, hi: 500 },
+  { name: 'temperature', key: 'alarm_temp_range', action: 'alarm_temp_action', unit: 'C', scale: 1 },
+  { name: 'pressure', key: 'alarm_pressure_range', action: 'alarm_pressure_action', unit: 'bar', scale: KPA_PER_BAR },
+  { name: 'flow', key: 'alarm_flow_rate_range', action: 'alarm_flow_rate_action', unit: 'L/min', scale: 0.001 },
 ];
 
-const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
-
-// current: the valve's service config. Returns { changes: { alarm_x_range: [min,max] }, notes: [text] }.
-// A pair with neither value filled in is left alone; with one filled in, the other keeps the valve's current value.
-function planLimits(config, current) {
-  const changes = {};
-  const notes = [];
+// service: Service.GetConfig(id 0); sys: Sys.GetConfig (optional). Returns a plain object safe to store and relay:
+// no address, password or coordinates.
+function summariseSettings(service, sys, now = new Date()) {
+  const s = service || {};
+  const limits = {};
   for (const l of LIMITS) {
-    const wantMin = config[l.min];
-    const wantMax = config[l.max];
-    if (!isNum(wantMin) && !isNum(wantMax)) continue;
-    const now = Array.isArray(current && current[l.key]) ? current[l.key] : null;
-    const curMin = now ? Math.round(now[0] / l.scale * 1e3) / 1e3 : undefined;
-    const curMax = now ? Math.round(now[1] / l.scale * 1e3) / 1e3 : undefined;
-    const min = isNum(wantMin) ? wantMin : curMin;
-    const max = isNum(wantMax) ? wantMax : curMax;
-    if (!isNum(min) || !isNum(max)) { notes.push(`${l.label}: the valve's current limit could not be read, so set both the minimum and the maximum`); continue; }
-    if (min < l.lo || max > l.hi) { notes.push(`${l.label}: ${min} to ${max} ${l.unit} is outside ${l.lo} to ${l.hi}; not changed`); continue; }
-    if (!(min < max)) { notes.push(`${l.label}: the minimum (${min}) must be below the maximum (${max}); not changed`); continue; }
-    const pair = [Math.round(min * l.scale * 1e6) / 1e6, Math.round(max * l.scale * 1e6) / 1e6];
-    if (!now || now[0] !== pair[0] || now[1] !== pair[1]) changes[l.key] = pair;
+    const v = s[l.key];
+    limits[l.name] = Array.isArray(v) && v.length === 2
+      ? { min: round(v[0] / l.scale), max: round(v[1] / l.scale), unit: l.unit, action: s[l.action] || null }
+      : null;
   }
-  return { changes, notes };
+  return {
+    read_at: now.toISOString(),
+    limits,
+    units_on_valve_page: { temperature: s.temp_unit || null, pressure: s.pressure_unit || null, volume: s.volume_unit || null },
+    on_power_restore: s.on_power_restore || null,
+    timezone: (sys && sys.location && sys.location.tz) || null,
+    firmware: (sys && sys.device && sys.device.fw_id) || null,
+    pressure_is_absolute_at_zero_flow: true,
+  };
 }
 
-// One line per limit for the log, in the settings' own units.
-function describeLimits(current) {
-  return LIMITS.map((l) => {
-    const v = current && current[l.key];
-    return Array.isArray(v) ? `${l.label} ${Math.round(v[0] / l.scale * 1e3) / 1e3} to ${Math.round(v[1] / l.scale * 1e3) / 1e3} ${l.unit}` : `${l.label} unknown`;
-  }).join(', ');
+// One line for the log.
+function describeSettings(st) {
+  const l = st.limits;
+  const one = (n) => (l[n] ? `${n} ${l[n].min} to ${l[n].max} ${l[n].unit} (${l[n].action})` : `${n} unknown`);
+  return `${one('temperature')}, ${one('pressure')}, ${one('flow')}; on power restore: ${st.on_power_restore}; ` +
+    `valve page units: ${st.units_on_valve_page.temperature}, ${st.units_on_valve_page.pressure}, ${st.units_on_valve_page.volume}; ` +
+    `time zone ${st.timezone}; firmware ${st.firmware}`;
 }
 
-module.exports = { planLimits, describeLimits, LIMITS };
+// Everything except the read time, to tell whether the valve's settings changed since the last read.
+const settingsKey = (st) => JSON.stringify({ ...st, read_at: undefined });
+
+module.exports = { summariseSettings, describeSettings, settingsKey, LIMITS };

@@ -181,18 +181,21 @@ console.log('longrun ok');
   console.log('now file and days ok');
 }
 
-// --- valve alarm limits (limits.js) ---
+// --- valve settings (limits.js): read, summarised, never written ---
 {
-  const { planLimits, describeLimits } = require('./limits.js');
+  const { summariseSettings, describeSettings, settingsKey } = require('./limits.js');
   const assert2 = require('assert');
-  const cur = { alarm_temp_range: [3, 50], alarm_pressure_range: [100, 550], alarm_flow_rate_range: [75, 110] };
-  assert2.deepStrictEqual(planLimits({}, cur), { changes: {}, notes: [] });
-  assert2.deepStrictEqual(planLimits({ limitPressureMinBar: 1.5 }, cur).changes, { alarm_pressure_range: [150, 550] });
-  assert2.deepStrictEqual(planLimits({ limitTempMin: 3, limitTempMax: 50 }, cur).changes, {});
-  assert2.deepStrictEqual(planLimits({ limitFlowMin: 0, limitFlowMax: 100 }, cur).changes, { alarm_flow_rate_range: [0, 0.1] });
-  assert2.ok(planLimits({ limitFlowMin: 100, limitFlowMax: 90 }, cur).notes[0].includes('must be below'));
-  assert2.ok(planLimits({ limitPressureMaxBar: 50 }, cur).notes[0].includes('outside'));
-  assert2.ok(planLimits({ limitTempMin: 5 }, {}).notes[0].includes('could not be read'));
-  assert2.strictEqual(describeLimits(cur), 'temperature 3 to 50 C, pressure 1 to 5.5 bar, flow 75000 to 110000 L/min');
-  console.log('ok limits');
+  const svc = { temp_unit: 'C', pressure_unit: 'PSI', volume_unit: 'lit', alarm_temp_range: [3, 50], alarm_temp_action: 'close',
+    alarm_pressure_range: [100, 550], alarm_pressure_action: 'close', alarm_flow_rate_range: [75, 110], alarm_flow_rate_action: 'close', on_power_restore: 'none' };
+  const sys = { location: { tz: 'Europe/London', lat: 51.3, lon: 1.3 }, device: { fw_id: 'fw1' } };
+  const st = summariseSettings(svc, sys, new Date(0));
+  assert2.deepStrictEqual(st.limits.pressure, { min: 1, max: 5.5, unit: 'bar', action: 'close' });
+  assert2.deepStrictEqual(st.limits.flow, { min: 75000, max: 110000, unit: 'L/min', action: 'close' });
+  assert2.strictEqual(st.timezone, 'Europe/London');
+  assert2.ok(!JSON.stringify(st).includes('51.3'), 'no coordinates are kept');
+  assert2.ok(describeSettings(st).includes('pressure 1 to 5.5 bar (close)'));
+  assert2.strictEqual(settingsKey(st), settingsKey(summariseSettings(svc, sys, new Date(5))));
+  assert2.notStrictEqual(settingsKey(st), settingsKey(summariseSettings({ ...svc, alarm_temp_range: [4, 50] }, sys)));
+  assert2.strictEqual(summariseSettings(null, null).limits.flow, null);
+  console.log('ok settings');
 }

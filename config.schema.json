@@ -160,44 +160,6 @@
         "placeholder": "Water Suspected Leak Alarm",
         "description": "Empty uses \"Water Suspected Leak Alarm\"."
       },
-      "limitTempMin": {
-        "title": "Valve alarm: lowest water temperature (°C)",
-        "type": "number",
-        "description": "The valve's own alarm limits. Leave all of these empty to leave the valve's settings alone; the plugin logs the valve's current limits at every start. Outside a range the valve closes. Fill in only the ones to change.",
-        "minimum": -20,
-        "maximum": 100
-      },
-      "limitTempMax": {
-        "title": "Valve alarm: highest water temperature (°C)",
-        "type": "number",
-        "minimum": -20,
-        "maximum": 100
-      },
-      "limitPressureMinBar": {
-        "title": "Valve alarm: lowest pressure (bar)",
-        "type": "number",
-        "description": "As the valve reads it: absolute pressure while no water flows, so about 1 bar above the gauge figure.",
-        "minimum": 0,
-        "maximum": 10
-      },
-      "limitPressureMaxBar": {
-        "title": "Valve alarm: highest pressure (bar)",
-        "type": "number",
-        "minimum": 0,
-        "maximum": 10
-      },
-      "limitFlowMin": {
-        "title": "Valve alarm: lowest flow (L/min)",
-        "type": "number",
-        "minimum": 0,
-        "maximum": 500
-      },
-      "limitFlowMax": {
-        "title": "Valve alarm: highest flow (L/min)",
-        "type": "number",
-        "minimum": 0,
-        "maximum": 500
-      },
       "devices": {
         "title": "Valves",
         "type": "array",
