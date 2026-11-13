@@ -7,7 +7,8 @@
 const MIN_FLOW_LPM = 0.05;
 
 class RunTracker {
-  constructor({ alertMinutes = 30, alertLitres = 0, shutOffMinutes = 0, shutOffLitres = 0, graceMs = 90000 } = {}) {
+  constructor({ alertMinutes = 30, alertLitres = 0, shutOffMinutes = 0, shutOffLitres = 0, graceMs = 90000, minFlowLpm = MIN_FLOW_LPM } = {}) {
+    this.minFlowLpm = minFlowLpm;
     this.alertMinutes = alertMinutes;
     this.alertLitres = alertLitres;
     this.shutOffMinutes = shutOffMinutes;
@@ -26,7 +27,7 @@ class RunTracker {
 
   // nowMs: time of this reading; flowLpm: litres per minute; totalL: the valve's water counter in litres, or null.
   update(nowMs, flowLpm, totalL) {
-    const flowing = typeof flowLpm === 'number' && flowLpm >= MIN_FLOW_LPM;
+    const flowing = typeof flowLpm === 'number' && flowLpm >= this.minFlowLpm;
     let ended = false;
     if (flowing) {
       if (this.start === null) {

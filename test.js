@@ -142,6 +142,14 @@ const MIN = 60000;
   drip.update(0, 0.02, 0);
   assert.strictEqual(drip.update(30 * MIN, 0.02, 1).active, false);
 }
+{
+  // a tolerance: 0.2 L/min for an hour is ignored at 0.5, a real run still counts
+  const tol = new RunTracker({ alertMinutes: 20, minFlowLpm: 0.5 });
+  tol.update(0, 0.2, 0);
+  assert.strictEqual(tol.update(60 * MIN, 0.2, 12).active, false);
+  tol.update(61 * MIN, 6, 12);
+  assert.strictEqual(tol.update(82 * MIN, 6, 140).alert, true);
+}
 console.log('longrun ok');
 
 // ---- the per-poll "now" file and per-day totals

@@ -84,6 +84,14 @@
         "minimum": 0,
         "maximum": 1440
       },
+      "ignoreFlowBelowLitresPerMinute": {
+        "title": "Ignore flow below (litres a minute)",
+        "description": "Flow at or below this does not count as water running, for the 'running too long' sensor and holiday mode. Use it for an ice maker or a slow top-up (0.5 is a good start; a tap is several litres a minute). Higher values hide slower real leaks.",
+        "type": "number",
+        "default": 0.05,
+        "minimum": 0.05,
+        "maximum": 5
+      },
       "alertAfterLitres": {
         "title": "Alert when a run has used (litres)",
         "description": "Same sensor, triggered by volume. 0 turns it off.",

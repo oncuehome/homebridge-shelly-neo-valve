@@ -77,6 +77,7 @@ All are optional and in the plugin settings. Defaults in brackets.
 | Setting | What it does |
 |---|---|
 | Alert when water has run for (30 min) | Unexpected flow after this long without stopping. 0 turns it off |
+| Ignore flow below (L/min) | Flow at or below this does not count as water running. Use about 0.5 for an ice maker or slow top-up. Default 0.05 |
 | Alert when a run has used (0 L) | The same, by litres |
 | Shut the water off after (0 = never) | Close the valve after this many minutes or litres of unbroken flow. This also stops a bath left running on purpose |
 | Holiday mode alert after (3 min) | How soon water running counts in Holiday mode |

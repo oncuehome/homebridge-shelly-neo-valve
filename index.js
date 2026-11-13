@@ -196,6 +196,8 @@ class ShellyNeoValvePlatform {
     const alertLitres = num(this.config.alertAfterLitres, 0);
     const shutOffMinutes = num(this.config.shutOffAfterMinutes, 0);
     const shutOffLitres = num(this.config.shutOffAfterLitres, 0);
+    // Flow at or below this (litres a minute) is treated as no flow: an ice maker, a slow top-up, a drip. Default is just above zero.
+    const minFlowLpm = Math.max(0.05, num(this.config.ignoreFlowBelowLitresPerMinute, 0.05));
     // Holiday mode: a switch in Home. While it is on, nobody should be using water, so water running for a few minutes (the
     // alert) or longer (the optional shut-off) trips the same "running too long" sensor. It is remembered across restarts.
     const holidayEnabled = this.config.holidayMode !== false;
@@ -233,11 +235,11 @@ class ShellyNeoValvePlatform {
       if (old) accessory.removeService(old);
     }
     const tracker = new RunTracker({
-      alertMinutes, alertLitres, shutOffMinutes, shutOffLitres,
+      alertMinutes, alertLitres, shutOffMinutes, shutOffLitres, minFlowLpm,
       graceMs: Math.max(90, 3 * Math.max(5, this.config.pollSeconds || 15)) * 1000,
     });
     const holidayTracker = new RunTracker({
-      alertMinutes: holidayAlertMinutes, shutOffMinutes: holidayShutOffMinutes,
+      alertMinutes: holidayAlertMinutes, shutOffMinutes: holidayShutOffMinutes, minFlowLpm,
       graceMs: Math.max(90, 3 * Math.max(5, this.config.pollSeconds || 15)) * 1000,
     });
     let longRunOn = false;
