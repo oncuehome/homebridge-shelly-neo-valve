@@ -148,6 +148,8 @@ const logs = [];
   assert.strictEqual(docH.plugin_rules.alert_after_minutes, 30);
   assert.strictEqual(docH.plugin_rules.shut_off_after_minutes, 90);
   assert.strictEqual(docH.plugin_rules.holiday.alert_minutes, 3);
+  assert.strictEqual(docH.plugin_rules.ignore_flow_lpm, 0.05);
+  assert.deepStrictEqual(docH.plugin_rules.slow_leak_test, { enabled: false, time: '03:00', minutes: 5, litres: 0.5 });
   hol.getCharacteristic('On').set(false);
   valve.flow = 0;
   for (let i = 0; i < 3; i++) await tick(2);

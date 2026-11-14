@@ -290,6 +290,9 @@ class ShellyNeoValvePlatform {
       recorder.setRules({
         alert_after_minutes: alertMinutes, alert_after_litres: alertLitres,
         shut_off_after_minutes: shutOffMinutes, shut_off_after_litres: shutOffLitres,
+        ignore_flow_lpm: minFlowLpm,
+        slow_leak_test: { enabled: this.config.slowLeakTest === true, time: String(this.config.slowLeakTestTime || '03:00').slice(0, 5),
+          minutes: num(this.config.slowLeakTestMinutes, 5), litres: num(this.config.slowLeakTestLitres, 0.5) },
         holiday: {
           enabled: holidayEnabled, alert_minutes: holidayAlertMinutes, shut_off_minutes: holidayShutOffMinutes,
           allowance_litres_24h: holidayAllowance.litres,
