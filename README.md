@@ -18,15 +18,17 @@ One accessory in Apple Home with these tiles. Every name can be changed in the p
 | **Water Holiday Mode** | Switch | Turn on when the home is empty: any water running becomes an alarm |
 | Water temperature, pressure, flow | Sensors (optional) | The numbers. Home has no pressure or flow sensor, so those two appear as light sensors: the number is the real value (Home labels it "lux") |
 
-<!-- IMAGE: tiles - the five tiles in Apple Home, named -->
+<!-- IMAGE: tiles - the tiles in Apple Home, named -->
 
-## The two kinds of alarm
+## The three kinds of alarm
 
 - **Critical fault** is the valve's own protection. You set temperature, pressure and flow limits **on the valve**. If a reading goes outside a limit the valve closes the water itself, even if Homebridge, your Wi-Fi or the internet is down. The plugin then turns the Critical Fault sensor on. It cannot tell which limit tripped, and it looks the same as someone pressing the button on the valve.
 - **Unexpected flow** is the plugin's own watch, set in the Homebridge settings:
   - *Running too long:* water that has not stopped for 30 minutes (you choose), or has used a set number of litres.
   - *Holiday mode:* with the switch on, water running for just 3 minutes (you choose) is an alarm. It can also add up the litres used in the last 24 hours and alarm over an allowance, which catches slow leaks that never make one long run. A daily time window lets sprinklers run without an alarm.
   - Either rule can be set to close the valve too (off by default).
+  - *Small flows are ignored.* Flow at or below a limit you set (**Ignore flow below**) does not count as water running, so an ice maker or a slow top-up does not start a run. About 0.5 litres a minute suits most homes. A real leak that small is caught by the slow leak test instead.
+- **Slow leak test** is a nightly check for the leak that never makes one long run. In a short quiet window (3:00 for 5 minutes by default) the valve's water counter should not move at all. If more than the allowance (0.5 litres by default) passes, the **Water Slow Leak Sensor** trips. It only watches: it never closes the valve. It stays on until a later night's test passes, and survives a Homebridge restart. If Homebridge was down for the window, that night gives no result either way. Switch it on in the settings (it is off by default); the sensor appears in Home once it is on.
 
 ## Before you start: set up the valve itself
 
@@ -61,7 +63,7 @@ Do this first, with the valve's own app or web page. The plugin never changes th
 
 ## Set up notifications in Apple Home
 
-The alarms only tell you something if Home sends a notification. For each of **Water Critical Fault Sensor** and **Water Unexpected Flow Sensor** (and **Water Valve Status** if you want to know when the water is switched off): press and hold the tile, open **Settings**, then **Status & Notifications**, and turn on notifications. Home treats them as leak sensors, so they are loud.
+The alarms only tell you something if Home sends a notification. For each of **Water Critical Fault Sensor**, **Water Unexpected Flow Sensor** and, if you use the nightly test, **Water Slow Leak Sensor** (and **Water Valve Status** if you want to know when the water is switched off): press and hold the tile, open **Settings**, then **Status & Notifications**, and turn on notifications. Home treats them as leak sensors, so they are loud.
 
 <!-- IMAGE: home-notifications - the Home notification setting for a sensor -->
 
@@ -69,7 +71,20 @@ The alarms only tell you something if Home sends a notification. For each of **W
 
 - **Normal days:** nothing to do. The Switch shows and controls the water.
 - **Going away:** turn on **Water Holiday Mode**, by hand or with a Home automation when the last person leaves. Turn it off when you are back.
-- **After an alarm:** find the cause first. The Critical Fault sensor clears when the valve is opened again. The Unexpected Flow sensor clears when the flow stops (or, if the plugin shut the valve, when you open it again).
+- **After an alarm:** find the cause first. The Critical Fault sensor clears when the valve is opened again. The Unexpected Flow sensor clears when the flow stops (or, if the plugin shut the valve, when you open it again). The Slow Leak sensor clears when a later night's test passes, so look for the cause and then wait for the next night's result.
+- **A bath or a long fill:** if you set the plugin to close the valve after some minutes of unbroken flow, a bath or fill that runs longer than that will be cut off. The alert comes first, so you can act before the valve closes. Open the valve again from Home, the Shelly app or the button on the valve.
+
+## A good starting point
+
+These are the settings in use in one family home, with an ice maker and a bath. Change them to suit.
+
+| Setting | Value | Why |
+|---|---|---|
+| Alert when water has run for | 15 minutes | Longer than any normal tap, shower or washing machine fill |
+| Shut the water off after | 20 minutes | Stops a forgotten tap or a burst while someone is in |
+| Ignore flow below | 0.5 L/min | An ice maker's refill is not a leak |
+| Nightly slow leak test | On, 03:00, 5 minutes, 0.5 L | Nobody is using water at 3 am, so any movement is worth knowing about |
+| Holiday mode alert after | 3 minutes | Nobody is home, so any running water matters |
 
 ## Settings you may want
 
@@ -85,9 +100,12 @@ All are optional and in the plugin settings. Defaults in brackets.
 | Holiday mode shut off after (0 = never) | 10 minutes suits an empty home |
 | Holiday allowance, litres in 24 hours (0 = off) | Slow leak alarm. Choose a little above what an empty home really uses |
 | Holiday ignore from / until (empty) | Daily window, for sprinklers, for example 05:00 to 07:00. The normal running-too-long limit still applies |
-| Nightly slow leak test (off) | Adds a Slow Leak Sensor. At the set time (default 03:00, 5 minutes) the valve counter should not move; more than the allowance (default 0.5 L) trips it until a later night passes. Only watches, never closes the valve |
+| Nightly slow leak test (off) | Adds a Slow Leak Sensor. Only watches, never closes the valve |
+| Slow leak test time (03:00) | Start of the quiet window, on the Pi's clock, 24-hour time |
+| Slow leak test length (5 min) | How long the window lasts |
+| Slow leak test allowance (0.5 L) | More than this in the window fails the test. A little above what an ice maker uses in one fill |
 | Units in Apple Home (same as the valve) | Pressure and flow in bar and L/min, or PSI and gal/min. Matches the valve's own page by default |
-| Tile names | Rename any of the five tiles |
+| Tile names | Rename any of the tiles |
 | Control in Apple Home (switch) | A plain On/Off switch. The alternative is Home's faucet tile, which shows as "running" whenever the valve is open, even with no water flowing |
 
 ## If something is not right
@@ -104,6 +122,7 @@ All are optional and in the plugin settings. Defaults in brackets.
 ## Good to know
 
 - Opening or closing the valve changes the water supply to the home. Test alarms when someone can open the valve again.
+- The slow leak test uses the valve's own counter, so it also notices a trickle that the "ignore flow below" setting hides. Something that fills at 3 am (an ice maker is about a tenth of a litre a cycle) can use up part of the allowance: raise it a little if the test fails for no reason.
 - The valve's own limits protect you even when everything else is down. The plugin's Unexpected Flow rules need Homebridge running.
 - Tested with firmware 2.0.1 of the `S3XT-0S` model.
 
@@ -114,12 +133,18 @@ All are optional and in the plugin settings. Defaults in brackets.
 The plugin saves a snapshot of the readings every few minutes to a small JSON file, for other tools to read (the On Cue hub reads it). It also keeps a copy of the valve's own settings beside the readings, so a reading can be understood against the limits and units the valve had at the time. No password or personal data is stored.
 
 - **Units:** snapshots always use bar (real, gauge pressure; the raw value is kept), litres and °C. The valve itself stores pressure in kPa (absolute) and flow in m³/min, and shows flow as L/min x1000 on its page. The atmospheric pressure setting (1.013 bar) is what is subtracted at zero flow.
-- **Running too long:** a run starts when flow is above 0.05 L/min and ends once it has been zero for about 90 seconds, so a blip between polls does not split it. Litres come from the valve's own counter. The Holiday allowance adds litres from the counter over the last 24 hours, only while Holiday mode is on and outside the ignore window.
+- **Running too long:** a run starts when flow is above the "Ignore flow below" setting (at least 0.05 L/min) and ends once it has been zero for about 90 seconds, so a blip between polls does not split it. Litres come from the valve's own counter. The Holiday allowance adds litres from the counter over the last 24 hours, only while Holiday mode is on and outside the ignore window.
 - **Alarm sensor:** the valve does not say why it closed, so the Critical Fault sensor is inferred: the valve was open and is now closed, and the plugin did not command it in the last minute.
+
+- **Slow leak test:** counts litres from the valve's counter between readings inside the window. A counter that goes down is treated as reset. It needs at least two readings in the window to give a result. The result is 'pass' or 'fail' on the poll that ends the window, and a failure is kept in the accessory's saved context so it survives a restart.
 
 ### Snapshot files
 
 Two files per valve in `snapshotDir`: `<host>.json` (below, written every `snapshotMinutes`) and `<host>.now` (just the newest reading, rewritten at every poll, so a reader can get a reading at most `pollSeconds` old without the history).
+
+### The rules, as the plugin is running them
+
+Each snapshot, and the `.now` file, also carries `plugin_rules`: the rules the plugin is actually running, so another tool can describe what is being watched without reading the Homebridge config. Numbers, flags and `HH:MM` times only. Fields: `alert_after_minutes`, `alert_after_litres`, `shut_off_after_minutes`, `shut_off_after_litres` (0 is off), `ignore_flow_lpm` (flow at or below this is not counted as running), `slow_leak_test` (`enabled`, `time`, `minutes`, `litres`), and `holiday` (`enabled`, `alert_minutes`, `shut_off_minutes`, `allowance_litres_24h`, `ignore_from`, `ignore_to`). Change a setting, restart Homebridge, and these follow. `valve_settings` holds the valve's own limits as last read.
 
 ### Snapshot file format
 
