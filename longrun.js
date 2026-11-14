@@ -109,4 +109,46 @@ class Allowance {
   }
 }
 
-module.exports = { RunTracker, MIN_FLOW_LPM, inWindow, Allowance };
+// A nightly slow-leak test: in a short quiet window (say 03:00 for 5 minutes) the valve's water counter should not move. Passive:
+// it only watches, it never closes the valve. More than the allowance in the window fails the test; the failure stays until a later
+// night's window passes. A window with fewer than two readings (the plugin was down) gives no result either way.
+class QuietTest {
+  constructor({ at = '03:00', minutes = 5, allowanceLitres = 0.5 } = {}) {
+    this.at = minutesOfDay(at);
+    this.minutes = Math.max(1, minutes);
+    this.allowance = allowanceLitres;
+    this.enabled = this.at !== null;
+    this.running = false;
+    this.used = 0;
+    this.readings = 0;
+    this.lastTotal = null;
+  }
+
+  inside(date) {
+    if (!this.enabled) return false;
+    const now = date.getHours() * 60 + date.getMinutes();
+    const end = this.at + this.minutes;
+    return end <= 1440 ? now >= this.at && now < end : now >= this.at || now < end - 1440;
+  }
+
+  // Returns { running, litres, failing, result } where result is 'pass' or 'fail' only on the poll that ends a window.
+  update(date, totalL) {
+    const out = { running: false, litres: 0, failing: false, result: null };
+    if (!this.enabled || typeof totalL !== 'number') { if (typeof totalL === 'number') this.lastTotal = totalL; return out; }
+    if (this.inside(date)) {
+      if (!this.running) { this.running = true; this.used = 0; this.readings = 0; }
+      else if (this.lastTotal !== null) this.used += totalL >= this.lastTotal ? totalL - this.lastTotal : totalL;
+      this.readings += 1;
+      out.running = true;
+      out.failing = this.used > this.allowance;
+    } else if (this.running) {
+      this.running = false;
+      if (this.readings >= 2) out.result = this.used > this.allowance ? 'fail' : 'pass';
+    }
+    out.litres = Math.round(this.used * 100) / 100;
+    this.lastTotal = totalL;
+    return out;
+  }
+}
+
+module.exports = { RunTracker, MIN_FLOW_LPM, inWindow, Allowance, QuietTest };

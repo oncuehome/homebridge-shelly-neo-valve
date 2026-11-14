@@ -14,6 +14,7 @@ One accessory in Apple Home with these tiles. Every name can be changed in the p
 | **Water Valve Status** | Contact sensor. Closed = water off | A notification whenever the water is switched off or on |
 | **Water Critical Fault Sensor** | Leak sensor | The valve closed **by itself** (one of the valve's own alarms) |
 | **Water Unexpected Flow Sensor** | Leak sensor | Water running longer than it should: forgotten tap or bath, or a slow leak in Holiday mode |
+| **Water Slow Leak Sensor** | Leak sensor | Optional. Trips when the nightly quiet-window test sees water moving |
 | **Water Holiday Mode** | Switch | Turn on when the home is empty: any water running becomes an alarm |
 | Water temperature, pressure, flow | Sensors (optional) | The numbers. Home has no pressure or flow sensor, so those two appear as light sensors: the number is the real value (Home labels it "lux") |
 
@@ -84,6 +85,7 @@ All are optional and in the plugin settings. Defaults in brackets.
 | Holiday mode shut off after (0 = never) | 10 minutes suits an empty home |
 | Holiday allowance, litres in 24 hours (0 = off) | Slow leak alarm. Choose a little above what an empty home really uses |
 | Holiday ignore from / until (empty) | Daily window, for sprinklers, for example 05:00 to 07:00. The normal running-too-long limit still applies |
+| Nightly slow leak test (off) | Adds a Slow Leak Sensor. At the set time (default 03:00, 5 minutes) the valve counter should not move; more than the allowance (default 0.5 L) trips it until a later night passes. Only watches, never closes the valve |
 | Units in Apple Home (same as the valve) | Pressure and flow in bar and L/min, or PSI and gal/min. Matches the valve's own page by default |
 | Tile names | Rename any of the five tiles |
 | Control in Apple Home (switch) | A plain On/Off switch. The alternative is Home's faucet tile, which shows as "running" whenever the valve is open, even with no water flowing |

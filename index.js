@@ -3,7 +3,7 @@
 const crypto = require('crypto');
 const path = require('path');
 const { Recorder, gaugeBar, DEFAULT_ATMOSPHERIC_BAR } = require('./recorder.js');
-const { RunTracker, Allowance, inWindow } = require('./longrun.js');
+const { RunTracker, Allowance, inWindow, QuietTest } = require('./longrun.js');
 const { summariseSettings, describeSettings, settingsKey, settingsWarnings, homeUnits, fromBar, fromLitres, pressureLabel, flowLabel } = require('./limits.js');
 
 const PLUGIN_NAME = 'homebridge-shelly-neo-valve';
@@ -128,6 +128,7 @@ class ShellyNeoValvePlatform {
     const alarmName = label('alarmName', 'Water Critical Fault Sensor');
     const holidayName = label('holidayName', 'Water Holiday Mode');
     const suspectedName = label('suspectedLeakName', 'Water Unexpected Flow Sensor');
+    const quietName = label('slowLeakName', 'Water Slow Leak Sensor');
     const oldValve = accessory.getServiceById(Service.Valve, 'valve');
     const oldSwitch = accessory.getServiceById(Service.Switch, 'switch');
     let valve;
@@ -245,10 +246,29 @@ class ShellyNeoValvePlatform {
     let longRunOn = false;
     let shutOffLatched = false;
 
+    // Nightly slow-leak test (see longrun.js QuietTest): its own leak sensor, on while the last test failed.
+    const quiet = new QuietTest({
+      at: this.config.slowLeakTestTime || '03:00',
+      minutes: num(this.config.slowLeakTestMinutes, 5),
+      allowanceLitres: num(this.config.slowLeakTestLitres, 0.5),
+    });
+    let quietSensor = null;
+    let quietFailed = accessory.context.slowLeakFailed === true;
+    if (this.config.slowLeakTest === true && quiet.enabled) {
+      quietSensor = sub(Service.LeakSensor, 'slowleak', quietName);
+      quietSensor.setCharacteristic(Characteristic.Name, quietName);
+      quietSensor.updateCharacteristic(Characteristic.LeakDetected, quietFailed
+        ? Characteristic.LeakDetected.LEAK_DETECTED : Characteristic.LeakDetected.LEAK_NOT_DETECTED);
+    } else {
+      const old = accessory.getServiceById(Service.LeakSensor, 'slowleak');
+      if (old) accessory.removeService(old);
+      quietFailed = false;
+    }
+
     let lastCommandAt = 0;
     let alarmOn = false;
 
-    const all = [valve, temp, pressure, flow, contact, alarm, longRun, holidaySwitch].filter(Boolean);
+    const all = [valve, temp, pressure, flow, contact, alarm, longRun, quietSensor, holidaySwitch].filter(Boolean);
 
     // Snapshots: one reading every few minutes into a small JSON file (see recorder.js).
     const atmosphericBar = typeof this.config.atmosphericBar === 'number' ? this.config.atmosphericBar : DEFAULT_ATMOSPHERIC_BAR;
@@ -365,6 +385,20 @@ class ShellyNeoValvePlatform {
             longRunOn = true;
             this.log.warn('%s: shutting the valve after %s min / %s L of continuous flow', name, run.minutes, run.litres);
             try { await command(false); } catch (e) { shutOffLatched = false; /* command() already logged it; try again next poll */ }
+          }
+        }
+        if (quietSensor) {
+          const q = quiet.update(new Date(), reading.consumptionL);
+          let now = quietFailed;
+          if (q.failing) now = true;
+          if (q.result === 'fail') this.log.warn('%s: slow leak test failed: %s L used in %s min (allowance %s L)', name, q.litres, quiet.minutes, quiet.allowance);
+          if (q.result === 'pass') { now = false; this.log.info('%s: slow leak test passed: %s L used in %s min', name, q.litres, quiet.minutes); }
+          if (now !== quietFailed) {
+            quietFailed = now;
+            accessory.context.slowLeakFailed = now;
+            try { this.api.updatePlatformAccessories([accessory]); } catch (e) { /* saved on shutdown anyway */ }
+            quietSensor.updateCharacteristic(Characteristic.LeakDetected, now
+              ? Characteristic.LeakDetected.LEAK_DETECTED : Characteristic.LeakDetected.LEAK_NOT_DETECTED);
           }
         }
         if (recorder) {

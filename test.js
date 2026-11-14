@@ -150,6 +150,29 @@ const MIN = 60000;
   tol.update(61 * MIN, 6, 12);
   assert.strictEqual(tol.update(82 * MIN, 6, 140).alert, true);
 }
+{
+  const { QuietTest } = require('./longrun.js');
+  const at = (h, m) => new Date(2026, 10, 14, h, m, 0);
+  // quiet night: passes
+  let q = new QuietTest({ at: '03:00', minutes: 5, allowanceLitres: 0.5 });
+  q.update(at(2, 59), 100);
+  q.update(at(3, 0), 100); q.update(at(3, 2), 100.1);
+  assert.strictEqual(q.update(at(3, 5), 100.1).result, 'pass');
+  // a leak: fails inside the window and at its end
+  q = new QuietTest({ at: '03:00', minutes: 5, allowanceLitres: 0.5 });
+  q.update(at(3, 0), 100);
+  assert.strictEqual(q.update(at(3, 3), 101).failing, true);
+  assert.strictEqual(q.update(at(3, 6), 101).result, 'fail');
+  // only one reading in the window: no result
+  q = new QuietTest({ at: '03:00', minutes: 5 });
+  q.update(at(3, 4), 100);
+  assert.strictEqual(q.update(at(3, 7), 100).result, null);
+  // window across midnight and counter reset
+  q = new QuietTest({ at: '23:58', minutes: 5 });
+  assert.strictEqual(q.inside(at(0, 1)), true);
+  assert.strictEqual(q.inside(at(0, 4)), false);
+  assert.strictEqual(new QuietTest({ at: 'bad' }).enabled, false);
+}
 console.log('longrun ok');
 
 // ---- the per-poll "now" file and per-day totals

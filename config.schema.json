@@ -139,6 +139,32 @@
         "default": 0,
         "minimum": 0
       },
+      "slowLeakTest": {
+        "title": "Nightly slow leak test",
+        "description": "Adds a 'Water Slow Leak Sensor'. In a short quiet window each night the valve's water counter should not move; if more than the allowance is used, the sensor trips and stays on until a later night passes. It only watches, it never closes the valve.",
+        "type": "boolean",
+        "default": false
+      },
+      "slowLeakTestTime": {
+        "title": "Slow leak test starts at (time)",
+        "description": "24-hour time on the Pi's clock, for example 03:00.",
+        "type": "string",
+        "default": "03:00"
+      },
+      "slowLeakTestMinutes": {
+        "title": "Slow leak test length (minutes)",
+        "type": "number",
+        "default": 5,
+        "minimum": 1,
+        "maximum": 120
+      },
+      "slowLeakTestLitres": {
+        "title": "Slow leak test allowance (litres)",
+        "description": "Water used in the window above this fails the test. A little above what an ice maker or cylinder top-up uses.",
+        "type": "number",
+        "default": 0.5,
+        "minimum": 0
+      },
       "holidayIgnoreFrom": {
         "title": "In holiday mode, ignore water from (time)",
         "description": "A daily window when holiday mode does not count water, for sprinklers or irrigation. 24-hour time on the Pi's clock, for example 05:00. The normal \"running too long\" limits still apply. Leave both empty for no window.",
