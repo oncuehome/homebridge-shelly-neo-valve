@@ -289,7 +289,7 @@ class ShellyNeoValvePlatform {
       holidayAllowance.reset();
       longRunOn = false;
       if (longRun) longRun.updateCharacteristic(Characteristic.LeakDetected, Characteristic.LeakDetected.LEAK_NOT_DETECTED);
-      if (recorder) recorder.clearAlert();
+      if (recorder) { recorder.setAlert('unexpected_flow', false, {}, 'reset'); recorder.clearAlert(); }
       this.log.info('%s: unexpected flow alert cleared by hand', name);
     };
     const clearQuiet = () => {
@@ -298,6 +298,7 @@ class ShellyNeoValvePlatform {
       accessory.context.slowLeakFailed = false;
       try { this.api.updatePlatformAccessories([accessory]); } catch (e) { /* saved on shutdown anyway */ }
       if (quietSensor) quietSensor.updateCharacteristic(Characteristic.LeakDetected, Characteristic.LeakDetected.LEAK_NOT_DETECTED);
+      if (recorder) recorder.setAlert('slow_leak', false, {}, 'reset');
       this.log.info('%s: slow leak alert cleared by hand', name);
     };
     if (resetsOn && longRun) {
@@ -428,6 +429,7 @@ class ShellyNeoValvePlatform {
           const was = longRunOn;
           if (!run.active) ackRun = false;     // the run is over: the next one can alert again
           longRunOn = (run.alert && !ackRun) || shutOffLatched || slow.over;
+          if (recorder) recorder.setAlert('unexpected_flow', longRunOn, { minutes: run.minutes, litres: run.litres });
           if (longRun) {
             longRun.updateCharacteristic(Characteristic.LeakDetected, longRunOn
               ? Characteristic.LeakDetected.LEAK_DETECTED : Characteristic.LeakDetected.LEAK_NOT_DETECTED);
@@ -442,6 +444,7 @@ class ShellyNeoValvePlatform {
           }
         }
         if (quietSensor) {
+          if (recorder && quietFailed !== recorder.slowLeak) recorder.setAlert('slow_leak', quietFailed, {}, 'stopped');
           const q = quiet.update(new Date(), reading.consumptionL);
           let now = quietFailed;
           if (q.failing) now = true;
@@ -449,6 +452,7 @@ class ShellyNeoValvePlatform {
           if (q.result === 'pass') { now = false; this.log.info('%s: slow leak test passed: %s L used in %s min', name, q.litres, quiet.minutes); }
           if (now !== quietFailed) {
             quietFailed = now;
+            if (recorder) recorder.setAlert('slow_leak', now, { litres: q.litres, minutes: quiet.minutes }, 'stopped');
             accessory.context.slowLeakFailed = now;
             try { this.api.updatePlatformAccessories([accessory]); } catch (e) { /* saved on shutdown anyway */ }
             quietSensor.updateCharacteristic(Characteristic.LeakDetected, now

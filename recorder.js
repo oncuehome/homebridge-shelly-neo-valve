@@ -27,6 +27,8 @@ const localDate = (d) => {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 };
 
+const MAX_ALERTS = 50;
+
 class Recorder {
   constructor({ file, device, atmosphericBar = DEFAULT_ATMOSPHERIC_BAR, maxRows = 2016, keepDays = 400, now = () => new Date() }) {
     this.file = file;
@@ -44,6 +46,8 @@ class Recorder {
     this.settings = null;      // the valve's own settings when last read (limits, units, ...), kept beside the readings
     this.peakLpm = 0;          // highest flow seen since the last snapshot
     this.history = [];
+    this.alerts = [];          // alert events, newest last: { kind, started, ended, cleared_by, minutes, litres }
+    this.slowLeak = false;     // the slow-leak sensor is on now
     this.lastTotalL = null;    // water counter at the previous snapshot
     this.load();
   }
@@ -55,6 +59,8 @@ class Recorder {
       if (d.latest) this.latest = d.latest;
       if (d.valve_settings) this.settings = d.valve_settings;
       if (d.plugin_rules) this.rules = d.plugin_rules;
+      if (Array.isArray(d.alerts)) this.alerts = d.alerts.slice(-MAX_ALERTS);
+      if (typeof d.slow_leak === 'boolean') this.slowLeak = d.slow_leak;
       const daysOk = d.days && typeof d.days === 'object' && Object.values(d.days).every((v) => v && typeof v === 'object');
       if (daysOk) this.days = d.days;
       else this.rebuildDays();
@@ -108,6 +114,28 @@ class Recorder {
     this.saveNow();
   }
 
+  // Record an alert starting, carrying on or ending. kind: 'unexpected_flow' or 'slow_leak'. clearedBy: 'reset' (the switch) or
+  // 'stopped' (it ended by itself). Only changes are written to disk beyond the usual .now file.
+  setAlert(kind, active, info = {}, clearedBy = null) {
+    const open = [...this.alerts].reverse().find((a) => a.kind === kind && a.ended === null);
+    const at = this.now().toISOString();
+    let changed = false;
+    if (active && !open) {
+      this.alerts.push({ kind, started: at, ended: null, cleared_by: null, minutes: info.minutes ?? null, litres: info.litres ?? null });
+      if (this.alerts.length > MAX_ALERTS) this.alerts = this.alerts.slice(-MAX_ALERTS);
+      changed = true;
+    } else if (active && open) {
+      if (info.minutes !== undefined) open.minutes = info.minutes;
+      if (info.litres !== undefined) open.litres = info.litres;
+    } else if (!active && open) {
+      open.ended = at;
+      open.cleared_by = clearedBy || 'stopped';
+      changed = true;
+    }
+    if (kind === 'slow_leak') this.slowLeak = active;
+    if (changed && this.latest) { this.saveNow(); this.save(at); } else if (changed) this.saveNow();
+  }
+
   // The plugin's own rules as configured, written out with the readings so staff and the app can say what is being watched.
   setRules(rules) {
     this.rules = rules;
@@ -126,7 +154,7 @@ class Recorder {
     const dir = path.dirname(this.nowFile);
     fs.mkdirSync(dir, { recursive: true, mode: 0o755 });
     const tmp = `${this.nowFile}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify({ schema: 1, updated_at: this.latest.at, latest: this.latest, valve_settings: this.settings, plugin_rules: this.rules }), { mode: 0o644 });
+    fs.writeFileSync(tmp, JSON.stringify({ schema: 1, updated_at: this.latest.at, latest: this.latest, valve_settings: this.settings, plugin_rules: this.rules, slow_leak: this.slowLeak, alerts: this.alerts }), { mode: 0o644 });
     fs.renameSync(tmp, this.nowFile);
   }
 
@@ -165,6 +193,8 @@ class Recorder {
       latest: this.latest,
       valve_settings: this.settings,
       plugin_rules: this.rules,
+      slow_leak: this.slowLeak,
+      alerts: this.alerts,
       days: this.days,
       history: this.history,
     };

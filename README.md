@@ -63,7 +63,7 @@ Do this first, with the valve's own app or web page. The plugin never changes th
 
 ## Clearing an alert
 
-Two switches in Home, **Reset Unexpected Flow Alert** and **Reset Slow Leak Alert** (turn off with `resetSwitches: false`), clear the matching alert once you have looked into it. Each is a button: it turns itself off after a second. Resetting the unexpected-flow alert clears it in Home and in the On Cue app; the same run will not alert again, but a new one can.
+Two switches in Home, **Reset Unexpected Flow Alert** and **Reset Slow Leak Alert** (turn off with `resetSwitches: false`), clear the matching alert once you have looked into it. Each is a button: it turns itself off after a second. Each alert is also logged (started, ended, cleared by reset or stopped by itself) in the snapshot files for On Cue's hub to pass on. Resetting the unexpected-flow alert clears it in Home and in the On Cue app; the same run will not alert again, but a new one can.
 
 ## Set up notifications in Apple Home
 
