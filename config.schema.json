@@ -228,6 +228,24 @@
         "placeholder": "Water Critical Fault Sensor",
         "description": "Empty uses \"Water Critical Fault Sensor\"."
       },
+      "resetSwitches": {
+        "title": "Reset switches",
+        "type": "boolean",
+        "default": true,
+        "description": "Adds two buttons in Home, one to clear an Unexpected Flow alert and one to clear a Slow Leak alert. Each turns itself off again after a second."
+      },
+      "resetUnexpectedFlowName": {
+        "title": "Name of the Unexpected Flow reset switch",
+        "type": "string",
+        "placeholder": "Reset Unexpected Flow Alert",
+        "description": "Empty uses \"Reset Unexpected Flow Alert\"."
+      },
+      "resetSlowLeakName": {
+        "title": "Name of the Slow Leak reset switch",
+        "type": "string",
+        "placeholder": "Reset Slow Leak Alert",
+        "description": "Empty uses \"Reset Slow Leak Alert\"."
+      },
       "holidayName": {
         "title": "Name of the Holiday mode switch",
         "type": "string",

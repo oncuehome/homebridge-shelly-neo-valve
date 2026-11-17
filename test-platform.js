@@ -114,6 +114,17 @@ const logs = [];
   assert.strictEqual(valve.open, true, 'no shut-off yet');
   const nowDoc = JSON.parse(fs.readFileSync(path.join(dir, `127.0.0.1-${port}.now`), 'utf8'));
   assert.strictEqual(nowDoc.latest.run.alert, true);
+  // the reset switch: clears the alert in Home and in the file, turns itself off, and a run that carries on stays quiet
+  const resetFlow = svc('Switch', 'resetflow');
+  assert.ok(resetFlow, 'a reset switch for the unexpected flow alert');
+  assert.strictEqual(label('Switch', 'resetflow'), 'Reset Unexpected Flow Alert');
+  await resetFlow.getCharacteristic('On').set(true);
+  assert.strictEqual(leak('longrun'), 0, 'cleared by the reset switch');
+  assert.strictEqual(JSON.parse(fs.readFileSync(path.join(dir, `127.0.0.1-${port}.now`), 'utf8')).latest.run.alert, false, 'cleared in the file for the app');
+  valve.total += 40; await tick(5);
+  assert.strictEqual(leak('longrun'), 0, 'the same run does not alert again');
+  await new Promise((r) => realTimeout(r, 1200));
+  assert.strictEqual(resetFlow.getCharacteristic('On').value, false, 'the switch turned itself off');
   // carry on to 90 minutes: the valve is shut by the plugin, and the alert stays on
   for (let i = 0; i < 12; i++) { valve.total += 40; await tick(5); }
   assert.strictEqual(valve.open, false, 'shut off after 90 minutes');

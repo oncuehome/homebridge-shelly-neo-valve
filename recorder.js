@@ -102,6 +102,12 @@ class Recorder {
     this.saveNow();
   }
 
+  // Someone cleared the alert by hand: show it as cleared in the next file written, without waiting for the next poll.
+  clearAlert() {
+    if (this.latest && this.latest.run) this.latest.run = { ...this.latest.run, alert: false };
+    this.saveNow();
+  }
+
   // The plugin's own rules as configured, written out with the readings so staff and the app can say what is being watched.
   setRules(rules) {
     this.rules = rules;

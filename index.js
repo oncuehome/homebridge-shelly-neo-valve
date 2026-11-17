@@ -129,6 +129,8 @@ class ShellyNeoValvePlatform {
     const holidayName = label('holidayName', 'Water Holiday Mode');
     const suspectedName = label('suspectedLeakName', 'Water Unexpected Flow Sensor');
     const quietName = label('slowLeakName', 'Water Slow Leak Sensor');
+    const resetFlowName = label('resetUnexpectedFlowName', 'Reset Unexpected Flow Alert');
+    const resetQuietName = label('resetSlowLeakName', 'Reset Slow Leak Alert');
     const oldValve = accessory.getServiceById(Service.Valve, 'valve');
     const oldSwitch = accessory.getServiceById(Service.Switch, 'switch');
     let valve;
@@ -265,10 +267,58 @@ class ShellyNeoValvePlatform {
       quietFailed = false;
     }
 
+    // Reset switches: momentary. Turning one on clears that alert (in Home and in the app) and the switch turns itself off again.
+    // The unexpected-flow one clears the alert for the run that is going on now; a later, new run can alert again.
+    const resetsOn = this.config.resetSwitches !== false;
+    let ackRun = false;                 // the current run's alert has been cleared by hand
+    const momentary = (svc, onPress) => {
+      svc.setCharacteristic(Characteristic.Name, svc.displayName);
+      svc.getCharacteristic(Characteristic.On).onGet(() => false).onSet((v) => {
+        if (v !== true) return;
+        try { onPress(); } catch (e) { this.log.warn('%s: reset failed: %s', name, e.message || e); }
+        setTimeout(() => svc.updateCharacteristic(Characteristic.On, false), 1000);
+      });
+      svc.updateCharacteristic(Characteristic.On, false);
+    };
+    let resetFlowSwitch = null;
+    let resetQuietSwitch = null;
+    const clearLongRun = () => {
+      if (!longRunOn && !shutOffLatched) { this.log.info('%s: unexpected flow reset (nothing to clear)', name); return; }
+      ackRun = true;
+      shutOffLatched = false;
+      holidayAllowance.reset();
+      longRunOn = false;
+      if (longRun) longRun.updateCharacteristic(Characteristic.LeakDetected, Characteristic.LeakDetected.LEAK_NOT_DETECTED);
+      if (recorder) recorder.clearAlert();
+      this.log.info('%s: unexpected flow alert cleared by hand', name);
+    };
+    const clearQuiet = () => {
+      if (!quietFailed) { this.log.info('%s: slow leak reset (nothing to clear)', name); return; }
+      quietFailed = false;
+      accessory.context.slowLeakFailed = false;
+      try { this.api.updatePlatformAccessories([accessory]); } catch (e) { /* saved on shutdown anyway */ }
+      if (quietSensor) quietSensor.updateCharacteristic(Characteristic.LeakDetected, Characteristic.LeakDetected.LEAK_NOT_DETECTED);
+      this.log.info('%s: slow leak alert cleared by hand', name);
+    };
+    if (resetsOn && longRun) {
+      resetFlowSwitch = sub(Service.Switch, 'resetflow', resetFlowName);
+      momentary(resetFlowSwitch, clearLongRun);
+    } else {
+      const old = accessory.getServiceById(Service.Switch, 'resetflow');
+      if (old) accessory.removeService(old);
+    }
+    if (resetsOn && quietSensor) {
+      resetQuietSwitch = sub(Service.Switch, 'resetslow', resetQuietName);
+      momentary(resetQuietSwitch, clearQuiet);
+    } else {
+      const old = accessory.getServiceById(Service.Switch, 'resetslow');
+      if (old) accessory.removeService(old);
+    }
+
     let lastCommandAt = 0;
     let alarmOn = false;
 
-    const all = [valve, temp, pressure, flow, contact, alarm, longRun, quietSensor, holidaySwitch].filter(Boolean);
+    const all = [valve, temp, pressure, flow, contact, alarm, longRun, quietSensor, holidaySwitch, resetFlowSwitch, resetQuietSwitch].filter(Boolean);
 
     // Snapshots: one reading every few minutes into a small JSON file (see recorder.js).
     const atmosphericBar = typeof this.config.atmosphericBar === 'number' ? this.config.atmosphericBar : DEFAULT_ATMOSPHERIC_BAR;
@@ -376,7 +426,8 @@ class ShellyNeoValvePlatform {
         if (longRunRules) {
           if (reading.open && shutOffLatched && !run.active) shutOffLatched = false;   // opened again: the alert can clear
           const was = longRunOn;
-          longRunOn = run.alert || shutOffLatched || slow.over;
+          if (!run.active) ackRun = false;     // the run is over: the next one can alert again
+          longRunOn = (run.alert && !ackRun) || shutOffLatched || slow.over;
           if (longRun) {
             longRun.updateCharacteristic(Characteristic.LeakDetected, longRunOn
               ? Characteristic.LeakDetected.LEAK_DETECTED : Characteristic.LeakDetected.LEAK_NOT_DETECTED);
@@ -405,7 +456,7 @@ class ShellyNeoValvePlatform {
           }
         }
         if (recorder) {
-          recorder.observe(reading, run.active || longRunOn ? { minutes: run.minutes, litres: run.litres, alert: longRunOn } : null, holiday);
+          recorder.observe(reading, (run.active && !ackRun) || longRunOn ? { minutes: run.minutes, litres: run.litres, alert: longRunOn } : null, holiday);
           // Record the first good reading at once, so there is a snapshot as soon as the plugin starts.
           if (!firstSnapshotDone) { firstSnapshotDone = true; recorder.snapshot(true); }
         }
