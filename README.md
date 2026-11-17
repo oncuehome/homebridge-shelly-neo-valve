@@ -61,6 +61,10 @@ Do this first, with the valve's own app or web page. The plugin never changes th
 
 <!-- IMAGE: homebridge-settings - the plugin settings with the valve added -->
 
+## Clearing an alert
+
+Two switches in Home, **Reset Unexpected Flow Alert** and **Reset Slow Leak Alert** (turn off with `resetSwitches: false`), clear the matching alert once you have looked into it. Each is a button: it turns itself off after a second. Resetting the unexpected-flow alert clears it in Home and in the On Cue app; the same run will not alert again, but a new one can.
+
 ## Set up notifications in Apple Home
 
 The alarms only tell you something if Home sends a notification. For each of **Water Critical Fault Sensor**, **Water Unexpected Flow Sensor** and, if you use the nightly test, **Water Slow Leak Sensor** (and **Water Valve Status** if you want to know when the water is switched off): press and hold the tile, open **Settings**, then **Status & Notifications**, and turn on notifications. Home treats them as leak sensors, so they are loud.
